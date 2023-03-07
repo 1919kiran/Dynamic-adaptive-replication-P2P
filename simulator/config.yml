@@ -1,0 +1,6 @@
+distribution_size: 10000
+max_peaks: 10
+min_sample_size: 1000
+max_sample_size: 5000
+sampling_interval: 5min
+decay_rate: 0.5
