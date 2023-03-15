@@ -1,6 +1,14 @@
-distribution_size: 10000
-max_peaks: 10
-min_sample_size: 1000
-max_sample_size: 5000
-sampling_interval: 5min
-decay_rate: 0.5
+access_pattern:
+  distribution_size: 100
+  max_peaks: 10
+  min_sample_size: 5
+  max_sample_size: 20
+  range: 1
+
+decay_function:
+  decay_rate: 0.025
+
+file_data:
+  qsize: 100
+  cutoff_days: 5
+  sampling_interval: 60min
