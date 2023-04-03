@@ -5,14 +5,14 @@ from network.manager import Manager
 if __name__ == "__main__":
     # weight_calculator = WeightCalculator()
     # weight_calculator.start()
-    manager = Manager(10)
+    manager = Manager(num_nodes=5, num_files=10)
     manager.create_adjacency_list()
     manager.create_file_mapping()
-    manager.create_requests()
-    manager.start()
-    manager.wait()
-    manager.stop()
-    manager.wait_until_done()
+    # manager.start()
+    # manager.send_requests()
+    # manager.wait()
+    # manager.stop()
+    # manager.wait_until_done()
 
 
 

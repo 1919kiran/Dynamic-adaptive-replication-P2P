@@ -31,6 +31,6 @@ for t in access_pattern:
         files_access[random_file] += 1
         files = files + "file {} ".format(random_file)
     print("making requests for files: ", files)
-    # time.sleep(delta)
+    time.sleep(delta/10)
 
 print(files_access)

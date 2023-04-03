@@ -1,7 +1,9 @@
+import threading
+
 import csv
 import datetime
 import random
-import threading
+import time
 import queue
 from itertools import repeat
 from network.node import Node
@@ -9,16 +11,16 @@ from celery import Celery
 
 
 class Manager:
-    def __init__(self, num):
-        self.num = num
-        self.file_mapping = None
-        self.filemap = None  # dictionary of files to nodes
+    def __init__(self, num_nodes, num_files):
+        self.num_nodes = num_nodes
+        self.num_files = num_files
+        self.file_mapping = dict()
         self.ohsmap = None  # dictionary of node to ohs
         self.nodes = list()  # list of objects
         self.adj_list = dict()  # dictionary of node to set of nodes
         self.access_pattern = list()
         self.request_queue = queue.Queue()
-        for i in range(num):
+        for i in range(self.num_nodes):
             node = Node(i, self.request_queue)
             self.nodes.append(node)
 
@@ -33,11 +35,14 @@ class Manager:
     def wait(self):
         self.request_queue.join()
 
-    def create_requests(self):
+    def send_requests(self):
+        thread = threading.Thread(target=self.process_requests)
+        thread.start()
+
+    def process_requests(self):
         first_epoch = None
         second_epoch = None
         with open('../input/pattern.csv', newline='') as csvfile:
-            # Create a CSV reader object
             reader = csv.reader(csvfile, delimiter=',', quotechar='"')
             next(reader)
             for row in reader:
@@ -50,15 +55,16 @@ class Manager:
                     delta = (second_epoch - first_epoch).total_seconds()
                 self.access_pattern.append(int(row[1]))
 
-        # files_access = {i: 0 for i in range(1, self.num + 1)}
+        files_access = {i: 0 for i in range(1, self.num_nodes + 1)}
         for i in self.access_pattern:
             # files = ""
-            # for f in range(t):
-            #     random_file = random.randint(1, self.num)
-            #     files_access[random_file] += 1
-            #     files = files + "file {} ".format(random_file)
-            # print("making requests for files: ", files)
-            self.request_queue.put(random.randint(1, self.num))
+            for f in range(i):
+                random_file = random.randint(1, self.num_files)
+                files_access[random_file] += 1
+                self.request_queue.put(random_file)
+                # files = files + "," + str(random_file)
+            # print("making requests for files: ", files, flush=True)
+            time.sleep(0.01)
 
     def wait_until_done(self):
         print("waiting...")
@@ -75,11 +81,11 @@ class Manager:
 
     # Creates an adjacency list
     def create_adjacency_list(self):
-        self.adj_list = {i: set() for i in range(self.num)}
-        for curr in range(self.num):
-            num_neighbors = random.randint(1, self.num)
+        self.adj_list = {i: set() for i in range(self.num_nodes)}
+        for curr in range(self.num_nodes):
+            num_neighbors = random.randint(1, self.num_nodes)
             for i in range(num_neighbors):
-                neighbor = random.choice(range(self.num))
+                neighbor = random.choice(range(self.num_nodes))
                 if curr != neighbor:
                     self.adj_list[curr].add(neighbor)
                     self.adj_list[neighbor].add(curr)
@@ -89,13 +95,16 @@ class Manager:
         #     print(f"Node {node_id} is connected to nodes {neighbors}")
 
     def create_file_mapping(self):
-        self.file_mapping = {
-            'file1': random.sample(range(1, self.num + 1), random.randint(1, self.num / 2)),
-            'file2': random.sample(range(1, self.num + 1), random.randint(1, self.num / 2)),
-            'file3': random.sample(range(1, self.num + 1), random.randint(1, self.num / 2))
-        }
+        # self.file_mapping = {
+        #     'file1': random.sample(range(1, self.num+1), random.randint(1, int(self.num/2))),
+        #     'file2': random.sample(range(1, self.num+1), random.randint(1, int(self.num/2))),
+        #     'file3': random.sample(range(1, self.num+1), random.randint(1, int(self.num/2)))
+        # }
+        for k in range(self.num_files):
+            v = random.sample(range(1, self.num_nodes + 1), random.randint(1, int(self.num_nodes / 2)))
+            self.file_mapping[k] = v
         print("File map is created")
-        # print(self.file_mapping)
+        print(self.file_mapping)
 
     def select_node(self, filename):
         nodes = self.filemap.get(filename)

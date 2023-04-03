@@ -27,7 +27,7 @@ class Node(threading.Thread):
     def run(self):
         while True:
             item = self.queue.get()
-            print("Node {}: processing item {}".format(self.node_id, item))
+            print("Node{} processing file{}".format(self.node_id, item))
             self.queue.task_done()
 
     def _process_requests(self):
@@ -102,8 +102,3 @@ class Node(threading.Thread):
     def create_replica(self):
         self.build_priority_queue()
 
-# create_nodes(10)
-# create_adjacencylist(10)
-# create_filemap()
-#
-# send_requests()
