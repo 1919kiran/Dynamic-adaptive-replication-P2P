@@ -15,7 +15,6 @@ class DecayFunctionCalculator:
         access_weight = 0
         decay_rate = self.config.get("decay_rate")
         for access in grouped_timestamps:
-            pass
             # print(access[0].to_pydatetime())
             time_delta = (datetime.now() - access[0].to_pydatetime()).total_seconds() / 3600
             # print(time_delta)
