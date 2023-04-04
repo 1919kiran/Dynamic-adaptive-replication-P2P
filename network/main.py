@@ -1,4 +1,6 @@
-from network.manager import Manager
+import time
+
+from network.manager import NetworkManager
 from network.weight_calculator import WeightCalculator
 
 # from weight_calculator import WeightCalculator
@@ -7,14 +9,12 @@ from network.weight_calculator import WeightCalculator
 if __name__ == "__main__":
     # weight_calculator = WeightCalculator()
     # weight_calculator.start()
-    manager = Manager(num_nodes=5, num_files=10)
+    manager = NetworkManager(num_nodes=5, num_files=10)
     manager.create_adjacency_list()
     manager.create_file_mapping()
-    manager.start()
+    time.sleep(1)
     manager.send_requests()
-    # manager.wait()
-    # # manager.stop()
-    # manager.wait_until_done()
+    manager.start_nodes()
 
 
 

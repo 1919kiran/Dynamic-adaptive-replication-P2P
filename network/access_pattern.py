@@ -1,4 +1,4 @@
-import queue
+import sharedqueue
 import random
 from datetime import datetime, timedelta
 from collections import Counter
@@ -53,7 +53,7 @@ class FileAccessData:
         with open("config.yml", "r") as file:
             data = yaml.full_load(file)
         self.config = data.get("file_data")
-        self.request_timestamps = queue.Queue(self.config.get("qsize"))
+        self.request_timestamps = queue.SharedQueue(self.config.get("qsize"))
 
     def add_requests(self, timestamps):
         for timestamp in timestamps:

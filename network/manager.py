@@ -1,15 +1,17 @@
-import threading
-
 import csv
 import datetime
+import multiprocessing
 import random
+import threading
 import time
-import queue
-from itertools import repeat
+from multiprocessing import Manager
+
 from network.node import Node
 
 
-class Manager:
+# from multiprocessing.managers import
+
+class NetworkManager:
     def __init__(self, num_nodes, num_files):
         self.num_nodes = num_nodes
         self.num_files = num_files
@@ -18,27 +20,28 @@ class Manager:
         self.nodes = list()  # list of objects
         self.adj_list = dict()  # dictionary of node to set of nodes
         self.access_pattern = list()
-        self.request_queue = queue.Queue()
+        self.request_queue = Manager().Queue()
         for i in range(self.num_nodes):
-            node = Node(i, self.request_queue)
+            node = Node(i)
+            node.set_request_queue(self.request_queue)
             self.nodes.append(node)
 
-    def start(self):
-        for node in self.nodes:
-            node.start()
+    def start_nodes(self):
+        processes = [multiprocessing.Process(target=node.run) for node in self.nodes]
+        for process in processes:
+            process.start()
 
-    def stop(self):
-        for node in self.nodes:
-            node.stop()
-
-    def wait(self):
-        self.request_queue.join()
+        while True:
+            time.sleep(1)
+            # # print(f"Master queue size : {self.request_queue.qsize()}")
+            # if self.request_queue.empty():
+            #     break
 
     def send_requests(self):
-        thread = threading.Thread(target=self.process_requests)
+        thread = threading.Thread(target=self.send)
         thread.start()
 
-    def process_requests(self):
+    def send(self):
         first_epoch = None
         second_epoch = None
         with open('../input/pattern.csv', newline='') as csvfile:
@@ -54,18 +57,16 @@ class Manager:
                     delta = (second_epoch - first_epoch).total_seconds()
                 self.access_pattern.append(int(row[1]))
 
-        print(self.access_pattern)
-
         # files_access = {i: 0 for i in range(1, self.num_nodes + 1)}
         for i in self.access_pattern:
             # files = ""
             for f in range(i):
-                random_file = random.randint(1, self.num_files)
+                random_file = random.randint(1, 2)
                 # files_access[random_file] += 1
                 self.request_queue.put(random_file)
                 # files = files + "," + str(random_file)
             # print("making requests for files: ", files, flush=True)
-            # time.sleep(0.1)
+            time.sleep(0.01)
 
     def wait_until_done(self):
         print("waiting...")
@@ -96,19 +97,19 @@ class Manager:
             print(f"Node {node_id} is connected to nodes {neighbors}")
 
     def create_file_mapping(self):
-        # self.file_mapping = {
-        #     'file1': random.sample(range(1, self.num+1), random.randint(1, int(self.num/2))),
-        #     'file2': random.sample(range(1, self.num+1), random.randint(1, int(self.num/2))),
-        #     'file3': random.sample(range(1, self.num+1), random.randint(1, int(self.num/2)))
-        # }
-        for k in range(self.num_files):
-            v = random.sample(range(1, self.num_nodes + 1), random.randint(1, int(self.num_nodes / 2)))
-            self.file_mapping[k] = v
+        self.file_mapping = {
+            'file1': [1, 2, 3],
+            'file2': [1, 4],
+            'file3': [1, 5]
+        }
+        # for k in range(self.num_files):
+        #     v = random.sample(range(1, self.num_nodes + 1), random.randint(1, int(self.num_nodes / 2)))
+        #     self.file_mapping[k] = v
         print("File map is created")
         print(self.file_mapping)
 
     def select_node(self, filename):
-        nodes = self.filemap.get(filename)
+        nodes = self.file_mapping.get(filename)
         print("Nodes for the file: ", nodes)
         min_ohs = 1
         node_id = None
@@ -118,4 +119,3 @@ class Manager:
                 min_ohs = ohs_node
                 node_id = node
         return node_id
-
