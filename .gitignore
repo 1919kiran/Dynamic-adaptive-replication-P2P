@@ -28,3 +28,7 @@ replay_pid*
 *.xml
 *.iml
 .idea/*
+
+__pycache__/
+
+.*

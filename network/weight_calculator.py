@@ -12,6 +12,7 @@ class WeightCalculator(multiprocessing.Process):
         file_data.add_requests(timestamps)
 
         grouped_timestamps = file_data.group_timestamps()
+        print(grouped_timestamps)
 
         decay_function = DecayFunctionCalculator()
         f = decay_function.compute_decay_factor(grouped_timestamps, 100, 120)

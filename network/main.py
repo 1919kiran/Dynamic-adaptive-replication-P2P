@@ -1,4 +1,6 @@
 from network.manager import Manager
+from network.weight_calculator import WeightCalculator
+
 # from weight_calculator import WeightCalculator
 
 # Press the green button in the gutter to run the script.
@@ -10,9 +12,9 @@ if __name__ == "__main__":
     manager.create_file_mapping()
     manager.start()
     manager.send_requests()
-    manager.wait()
-    # manager.stop()
-    manager.wait_until_done()
+    # manager.wait()
+    # # manager.stop()
+    # manager.wait_until_done()
 
 
 

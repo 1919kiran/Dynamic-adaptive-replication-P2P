@@ -7,7 +7,6 @@ import time
 import queue
 from itertools import repeat
 from network.node import Node
-from celery import Celery
 
 
 class Manager:
@@ -55,6 +54,8 @@ class Manager:
                     delta = (second_epoch - first_epoch).total_seconds()
                 self.access_pattern.append(int(row[1]))
 
+        print(self.access_pattern)
+
         # files_access = {i: 0 for i in range(1, self.num_nodes + 1)}
         for i in self.access_pattern:
             # files = ""
@@ -64,7 +65,7 @@ class Manager:
                 self.request_queue.put(random_file)
                 # files = files + "," + str(random_file)
             # print("making requests for files: ", files, flush=True)
-            time.sleep(0.1)
+            # time.sleep(0.1)
 
     def wait_until_done(self):
         print("waiting...")
@@ -91,8 +92,8 @@ class Manager:
                     self.adj_list[neighbor].add(curr)
 
         print("Created adjacency list")
-        # for node_id, neighbors in self.adj_list.items():
-        #     print(f"Node {node_id} is connected to nodes {neighbors}")
+        for node_id, neighbors in self.adj_list.items():
+            print(f"Node {node_id} is connected to nodes {neighbors}")
 
     def create_file_mapping(self):
         # self.file_mapping = {

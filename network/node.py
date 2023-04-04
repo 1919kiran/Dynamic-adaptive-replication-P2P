@@ -7,6 +7,7 @@ import threading
 
 # Begin node class
 class Node(threading.Thread):
+    weight_pq  = queue.PriorityQueue()
     def __init__(self, node_id, manager_queue: queue.Queue):
         super().__init__()
         self.node_id = node_id
@@ -44,11 +45,12 @@ class Node(threading.Thread):
         self.worker_thread.join()
 
     def process_request(self):
-        while not self.stop_event.is_set():
-            try:
-                request = self.job_queue.get(timeout=1)
-            except queue.Empty:
-                continue
+        print("processing")
+        # while not self.stop_event.is_set():
+        #     try:
+        #         request = self.job_queue.get(timeout=1)
+        #     except queue.Empty:
+        #         continue
             # assign the task to a single worker thread here
             # time.sleep(0.1)  # simulate processing time
 
@@ -112,10 +114,11 @@ class Node(threading.Thread):
             print("Replica creation not required")
             print("___________")
 
-    def build_priority_queue(self):
+    def build_priority_queue(self, filename, weight):
         print("Creating replica")
+        weight_pq.put((weight, filename))
+
         print("___________")
 
     def create_replica(self):
         self.build_priority_queue()
-
