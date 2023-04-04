@@ -8,11 +8,11 @@ if __name__ == "__main__":
     manager = Manager(num_nodes=5, num_files=10)
     manager.create_adjacency_list()
     manager.create_file_mapping()
-    # manager.start()
-    # manager.send_requests()
-    # manager.wait()
+    manager.start()
+    manager.send_requests()
+    manager.wait()
     # manager.stop()
-    # manager.wait_until_done()
+    manager.wait_until_done()
 
 
 

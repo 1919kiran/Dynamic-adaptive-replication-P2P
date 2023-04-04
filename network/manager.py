@@ -30,7 +30,7 @@ class Manager:
 
     def stop(self):
         for node in self.nodes:
-            node.join()
+            node.stop()
 
     def wait(self):
         self.request_queue.join()
@@ -55,16 +55,16 @@ class Manager:
                     delta = (second_epoch - first_epoch).total_seconds()
                 self.access_pattern.append(int(row[1]))
 
-        files_access = {i: 0 for i in range(1, self.num_nodes + 1)}
+        # files_access = {i: 0 for i in range(1, self.num_nodes + 1)}
         for i in self.access_pattern:
             # files = ""
             for f in range(i):
                 random_file = random.randint(1, self.num_files)
-                files_access[random_file] += 1
+                # files_access[random_file] += 1
                 self.request_queue.put(random_file)
                 # files = files + "," + str(random_file)
             # print("making requests for files: ", files, flush=True)
-            time.sleep(0.01)
+            time.sleep(0.1)
 
     def wait_until_done(self):
         print("waiting...")

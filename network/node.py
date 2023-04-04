@@ -7,7 +7,7 @@ import threading
 
 # Begin node class
 class Node(threading.Thread):
-    def __init__(self, node_id, queue: queue.Queue):
+    def __init__(self, node_id, manager_queue: queue.Queue):
         super().__init__()
         self.node_id = node_id
         self.max_capacity = 10
@@ -22,18 +22,35 @@ class Node(threading.Thread):
         self.tcp_connection = []
         self.tbdf_queue = []
         self.storage = {}
-        self.queue = queue
+        self.master_queue = manager_queue
+        self.job_queue = queue.Queue()
+        self.worker_thread = threading.Thread(target=self.process_request)
+        self.stop_event = threading.Event()
 
     def run(self):
-        while True:
-            item = self.queue.get()
-            print("Node{} processing file{}".format(self.node_id, item))
-            self.queue.task_done()
+        self.worker_thread.start()
+        while not self.stop_event.is_set():
+            request = None
+            try:
+                request = self.master_queue.get()
+                print("Node{} processing file{}. Internal queue size = {}".format(self.node_id, request, self.job_queue.qsize()))
+            except queue.Empty:
+                continue
+            self.job_queue.put(item=request)
+            # time.sleep(0.1)  # simulate processing time
 
-    def _process_requests(self):
-        while True:
-            request = self.request_queue.get()
-            print("Processing request: ", request)
+    def stop(self):
+        self.stop_event.set()
+        self.worker_thread.join()
+
+    def process_request(self):
+        while not self.stop_event.is_set():
+            try:
+                request = self.job_queue.get(timeout=1)
+            except queue.Empty:
+                continue
+            # assign the task to a single worker thread here
+            # time.sleep(0.1)  # simulate processing time
 
     def __str__(self):
         return f"Node ID is {self.node_id}"
