@@ -1,16 +1,16 @@
 import time
-import random
-import csv
-import queue
 import threading
+from sharedqueue import SharedQueue
+import queue
 
 
-# Begin node class
-class Node(threading.Thread):
-    weight_pq  = queue.PriorityQueue()
-    def __init__(self, node_id, manager_queue: queue.Queue):
+class Node:
+    def __init__(self, node_id):
         super().__init__()
         self.node_id = node_id
+        self.request_queue = None
+        self.local_queue = SharedQueue()
+        self.worker_thread = None
         self.max_capacity = 10
         self.local_files_access_amount = 0
         self.request_amount = 0
@@ -23,36 +23,44 @@ class Node(threading.Thread):
         self.tcp_connection = []
         self.tbdf_queue = []
         self.storage = {}
-        self.master_queue = manager_queue
-        self.job_queue = queue.Queue()
-        self.worker_thread = threading.Thread(target=self.process_request)
-        self.stop_event = threading.Event()
+
+    def set_request_queue(self, request_queue):
+        self.request_queue = request_queue
 
     def run(self):
-        self.worker_thread.start()
-        while not self.stop_event.is_set():
-            request = None
+        enqueue_thread = threading.Thread(target=self.enqueue_to_local_queue)
+        dequeue_thread = threading.Thread(target=self.dequeue_from_local_queue)
+        background_thread = threading.Thread(target=self.calculations)
+        enqueue_thread.start()
+        dequeue_thread.start()
+        background_thread.start()
+
+    def enqueue_to_local_queue(self):
+        while True:
             try:
-                request = self.master_queue.get()
-                print("Node{} processing file{}. Internal queue size = {}".format(self.node_id, request, self.job_queue.qsize()))
+                time.sleep(0.05)
+                item = self.request_queue.get()
+                self.local_queue.put(item)
+                # print(f"Node{self.node_id} Local queue size before processing: {self.local_queue.qsize()}")
+                self.request_queue.task_done()
             except queue.Empty:
                 continue
-            self.job_queue.put(item=request)
-            # time.sleep(0.1)  # simulate processing time
+            except EOFError:
+                break
 
-    def stop(self):
-        self.stop_event.set()
-        self.worker_thread.join()
+    def dequeue_from_local_queue(self):
+        while True:
+            try:
+                item = self.local_queue.get()
+                time.sleep(0.1)
+                # print(f"Node{self.node_id} Local queue size after processing: {self.local_queue.qsize()}")
+            except Exception as e:
+                continue
 
-    def process_request(self):
-        print("processing")
-        # while not self.stop_event.is_set():
-        #     try:
-        #         request = self.job_queue.get(timeout=1)
-        #     except queue.Empty:
-        #         continue
-            # assign the task to a single worker thread here
-            # time.sleep(0.1)  # simulate processing time
+    def calculations(self):
+        while True:
+            print("Node{} access amount = {}".format(self.node_id, self.local_queue.qsize()))
+            time.sleep(1)
 
     def __str__(self):
         return f"Node ID is {self.node_id}"
@@ -103,7 +111,7 @@ class Node(threading.Thread):
         self.local_files_access_amount += 1
         curr_ohs = self.calculate_overheating_similarity()
         print("curr ohs ", curr_ohs)
-        ohsmap[self.node_id] = curr_ohs
+        self.ohsmap[self.node_id] = curr_ohs
         if curr_ohs > self.phi:
             print("Node Overloaded")
             print("___________")
@@ -116,7 +124,7 @@ class Node(threading.Thread):
 
     def build_priority_queue(self, filename, weight):
         print("Creating replica")
-        weight_pq.put((weight, filename))
+        self.weight_pq.put((weight, filename))
 
         print("___________")
 
