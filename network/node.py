@@ -12,11 +12,8 @@ class Node(threading.Thread):
         try:
             super().__init__()
             self.node_id = node_id
-            # self.local_queue = SharedQueue()
-            # self.worker_thread = None
             self.fileset = fileset
             self.max_capacity = 10
-            self.local_files_access_amount = 0
             self.request_amount = 0
             self.forwarding_bandwidth = 0
             self.theta = 0.3
@@ -54,21 +51,20 @@ class Node(threading.Thread):
             print(f"Node{self.node_id} subscribed to {queue_name}")
         channel.start_consuming()
 
-    def process_items(self):
-        self.local_queue.get()
-
     def dequeue_from_local_queue(self):
         while True:
             try:
                 self.local_queue.get()
-                time.sleep(0.15)
+                time.sleep(0.10)
             except Exception as e:
                 continue
 
     def calculations(self):
         while True:
-            print("Node{} access amount = {}".format(self.node_id, self.local_queue.qsize()))
-            time.sleep(1)
+            # print(f"Node{self.node_id} access amount = {self.local_queue.qsize()}")
+            # print(f"Node{self.node_id} node load = {self.calculate_node_load()}")
+            print(f"Node{self.node_id} ohs = {self.calculate_overheating_similarity()}")
+            time.sleep(5)
 
     def __str__(self):
         return f"Node ID is {self.node_id}\nFile set: {self.fileset}"
@@ -88,11 +84,8 @@ class Node(threading.Thread):
                 weights[file_id] = weight
         return weights
 
-    def calculate_request_amount(self):
-        self.request_amount = sum(self.local_files_access_amount.values()) + self.forwarding_bandwidth
-
     def calculate_node_load(self):
-        self.request_amount = self.local_files_access_amount + self.forwarding_bandwidth
+        self.request_amount = self.local_queue.qsize() + self.forwarding_bandwidth
         return self.request_amount / self.max_capacity
 
     def calculate_overheating_similarity(self):

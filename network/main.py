@@ -22,7 +22,7 @@ if __name__ == "__main__":
     manager = NetworkManager(num_nodes=num_nodes, num_files=num_files)
     adj_list = manager.create_adjacency_list()
     file_mapping = manager.create_file_mapping()
-    # manager.delete_message_queues()
+    manager.delete_message_queues()
     manager.create_message_queues()
 
     nodes = []
