@@ -1,36 +1,51 @@
-import time
-import datetime
-import csv
-import random
-
-first_epoch = None
-second_epoch = None
-access_pattern = []
-
-with open('../input/pattern.csv', newline='') as csvfile:
-    # Create a CSV reader object
-    reader = csv.reader(csvfile, delimiter=',', quotechar='"')
-    next(reader)
-    for row in reader:
-        if first_epoch is None:
-            first_epoch = datetime.datetime.strptime(str(row[0]), '%Y-%m-%d %H:%M:%S.%f')
-            continue
-        # timestamp = 2023-04-01 23:00:34.636319
-        if second_epoch is None:
-            second_epoch = datetime.datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S.%f')
-            delta = (second_epoch - first_epoch).total_seconds()
-        access_pattern.append(int(row[1]))
+import pika
+import multiprocessing as mp
 
 
-num_files = 10
-files_access = {i: 0 for i in range(1, num_files+1)}
-for t in access_pattern:
-    files = ""
-    for f in range(t):
-        random_file = random.randint(1, num_files)
-        files_access[random_file] += 1
-        files = files + "file {} ".format(random_file)
-    print("making requests for files: ", files)
-    time.sleep(delta/10)
+# Function for the publisher process
+def publisher():
+    connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+    channel = connection.channel()
 
-print(files_access)
+    channel.queue_declare(queue='hello')
+
+    channel.basic_publish(exchange='',
+                          routing_key='hello',
+                          body='Hello, RabbitMQ!')
+    print(" [x] Sent 'Hello, RabbitMQ!'")
+    connection.close()
+
+
+# Function for the subscriber process
+def subscriber(queue_name):
+    connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+    channel = connection.channel()
+
+    channel.queue_declare(queue=queue_name)
+
+    def callback(ch, method, properties, body):
+        print(" [x] Received %r" % body)
+
+    channel.basic_consume(queue=queue_name,
+                          auto_ack=True,
+                          on_message_callback=callback)
+
+    print(' [*] Waiting for messages. To exit press CTRL+C')
+    channel.start_consuming()
+
+
+if __name__ == '__main__':
+    # Start the publisher process
+    publisher_process = mp.Process(target=publisher)
+    publisher_process.start()
+
+    # Create a pool of subscriber processes
+    num_subscribers = 4  # Number of subscriber processes
+    subscriber_pool = mp.Pool(num_subscribers)
+    queue_names = ['hello' + str(i) for i in range(num_subscribers)]  # Generate unique queue names for each subscriber
+    subscriber_pool.map(subscriber, queue_names)
+
+    # Wait for all processes to complete
+    publisher_process.join()
+    subscriber_pool.close()
+    subscriber_pool.join()

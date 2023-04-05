@@ -1,59 +1,67 @@
 import time
 import threading
+from multiprocessing import Process, Pool, Queue
+
+import pika
 from sharedqueue import SharedQueue
 import queue
 
 
-class Node:
-    def __init__(self, node_id):
-        super().__init__()
-        self.node_id = node_id
-        self.request_queue = None
-        self.local_queue = SharedQueue()
-        self.worker_thread = None
-        self.max_capacity = 10
-        self.local_files_access_amount = 0
-        self.request_amount = 0
-        self.forwarding_bandwidth = 0
-        self.theta = 0.3
-        self.phi = 0.8
-        self.alpha = 70
-        self.eps = 100
-        self.accesses = []
-        self.tcp_connection = []
-        self.tbdf_queue = []
-        self.storage = {}
-
-    def set_request_queue(self, request_queue):
-        self.request_queue = request_queue
+class Node(threading.Thread):
+    def __init__(self, node_id, fileset):
+        try:
+            super().__init__()
+            self.node_id = node_id
+            # self.local_queue = SharedQueue()
+            # self.worker_thread = None
+            self.fileset = fileset
+            self.max_capacity = 10
+            self.local_files_access_amount = 0
+            self.request_amount = 0
+            self.forwarding_bandwidth = 0
+            self.theta = 0.3
+            self.phi = 0.8
+            self.alpha = 70
+            self.eps = 100
+            self.accesses = []
+            self.tcp_connection = []
+            self.connection = None
+            self.local_queue = SharedQueue()
+            # self.tbdf_queue = []
+            # self.storage = {}
+        except Exception as e:
+            print(f"Error while initializing Node{node_id}")
 
     def run(self):
-        enqueue_thread = threading.Thread(target=self.enqueue_to_local_queue)
-        dequeue_thread = threading.Thread(target=self.dequeue_from_local_queue)
+        puller_thread = threading.Thread(target=self.pull_from_queue)
+        processor_thread = threading.Thread(target=self.dequeue_from_local_queue)
         background_thread = threading.Thread(target=self.calculations)
-        enqueue_thread.start()
-        dequeue_thread.start()
+        puller_thread.start()
+        processor_thread.start()
         background_thread.start()
 
-    def enqueue_to_local_queue(self):
-        while True:
-            try:
-                time.sleep(0.05)
-                item = self.request_queue.get()
-                self.local_queue.put(item)
-                # print(f"Node{self.node_id} Local queue size before processing: {self.local_queue.qsize()}")
-                self.request_queue.task_done()
-            except queue.Empty:
-                continue
-            except EOFError:
-                break
+    def callback(self, ch, method, properties, body):
+        self.local_queue.put(body)
+
+    def pull_from_queue(self):
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host="localhost"))
+        channel = self.connection.channel()
+        for file in self.fileset:
+            queue_name = f"queue_{file}"
+            channel.queue_declare(queue=queue_name)
+            channel.queue_bind(queue=queue_name, exchange="amq.direct", routing_key=queue_name)
+            channel.basic_consume(queue=queue_name, auto_ack=True, on_message_callback=self.callback)
+            print(f"Node{self.node_id} subscribed to {queue_name}")
+        channel.start_consuming()
+
+    def process_items(self):
+        self.local_queue.get()
 
     def dequeue_from_local_queue(self):
         while True:
             try:
-                item = self.local_queue.get()
-                time.sleep(0.1)
-                # print(f"Node{self.node_id} Local queue size after processing: {self.local_queue.qsize()}")
+                self.local_queue.get()
+                time.sleep(0.15)
             except Exception as e:
                 continue
 
@@ -63,7 +71,7 @@ class Node:
             time.sleep(1)
 
     def __str__(self):
-        return f"Node ID is {self.node_id}"
+        return f"Node ID is {self.node_id}\nFile set: {self.fileset}"
 
     def add_access(self, file_id, timestamp, frequency):
         self.accesses.append((file_id, timestamp, frequency))
