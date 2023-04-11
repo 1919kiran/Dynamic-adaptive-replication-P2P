@@ -127,10 +127,15 @@ class NetworkManager(threading.Thread):
         return self.adj_list
 
     def create_file_mapping(self):
+        # self.file_mapping = {
+        #     1: {1, 2, 3},
+        #     2: {4, 5},
+        #     3: {1},
+        #     4: {1, 4},
+        #     5: {1, 5}
+        # }
         self.file_mapping = {
-            1: {1, 2, 3},
-            2: {4, 5},
-            3: {1, 2, 4}
+            1: {1}
         }
         # for k in range(self.num_files):
         #     v = random.sample(range(1, self.num_nodes + 1), random.randint(1, int(self.num_nodes / 2)))
