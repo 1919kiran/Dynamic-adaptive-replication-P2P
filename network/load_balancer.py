@@ -75,12 +75,10 @@ class LoadBalancer(threading.Thread):
         # print("Job Queue deleted successfully.")
 
     """ Returns a fileset of a node based on node_id """
-
     def get_files_by_nodeid(self, node_id):
         return self.node_mapping.get(node_id)
 
     """ Creates an adjacency list """
-
     def create_adjacency_list(self):
         self.adj_list = {i: set() for i in range(1, self.num_nodes + 1)}
         for curr in range(1, self.num_nodes):
