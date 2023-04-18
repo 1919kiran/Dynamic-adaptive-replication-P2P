@@ -57,4 +57,4 @@ def get_location():
 
 
 def get_node_locations(num_nodes):
-    return coordinates[0:num_nodes]
+    return coordinates[0:num_nodes-1]

@@ -4,26 +4,25 @@ import threading
 import json
 import pika
 import sys
-from multiprocessing import Manager, Process
+from multiprocessing import Manager
 from network.node import Node
 
 
 class LoadBalancer(threading.Thread):
     def __init__(self, num_nodes, num_files):
-        self.connection = None
-        self.channel = None
-        self.node_state = Manager().dict()
-        self.num_nodes = num_nodes
-        self.num_files = num_files
-        self.nodes = []
-        self.file_mapping = dict()
-        self.node_mapping = dict()
-        self.node_locations = dict()
-        self.node_pool = dict()
-        self.ohsmap = dict()  # dictionary of node to ohs
-        self.adj_list = dict()  # dictionary of node to set of nodes
         try:
             super().__init__()
+            self.connection = None
+            self.channel = None
+            self.num_nodes = num_nodes
+            self.num_files = num_files
+            self.nodes = []
+            self.file_mapping = dict()
+            self.node_mapping = dict()
+            self.node_locations = dict()
+            self.node_pool = dict()
+            self.ohs_map = Manager().dict()  # dictionary of node to ohs
+            self.adj_list = Manager().dict()  # dictionary of node to set of nodes
         except Exception as e:
             print("Error while initializing the load balancer")
 
@@ -76,10 +75,12 @@ class LoadBalancer(threading.Thread):
         # print("Job Queue deleted successfully.")
 
     """ Returns a fileset of a node based on node_id """
+
     def get_files_by_nodeid(self, node_id):
         return self.node_mapping.get(node_id)
 
     """ Creates an adjacency list """
+
     def create_adjacency_list(self):
         self.adj_list = {i: set() for i in range(1, self.num_nodes + 1)}
         for curr in range(1, self.num_nodes):
@@ -106,7 +107,7 @@ class LoadBalancer(threading.Thread):
         self.file_mapping = {
             1: [1, 2, 3],
             2: [1, 4, 5],
-            3: [1]
+            3: [1, 2, 3, 4, 5]
         }
         for key, values in self.file_mapping.items():
             for value in values:
@@ -122,7 +123,7 @@ class LoadBalancer(threading.Thread):
         min_ohs = 1
         node_id = None
         for node in nodes:
-            ohs_node = self.ohsmap.get(node)
+            ohs_node = self.ohs_map.get(node)
             if ohs_node < min_ohs:
                 min_ohs = ohs_node
                 node_id = node
@@ -131,7 +132,12 @@ class LoadBalancer(threading.Thread):
     def start_nodes(self):
         for i in range(1, self.num_nodes + 1):
             fileset = self.get_files_by_nodeid(i)
-            node = Node(node_id=i, node_location=self.node_locations[i], fileset=fileset, shared_dict=self.node_state)
+            node = Node(node_id=i,
+                        node_locations=self.node_locations,
+                        fileset=fileset,
+                        ohs_map=self.ohs_map,
+                        adj_list=self.adj_list
+                        )
             self.nodes.append(node)
         for node in self.nodes:
             node.start()

@@ -1,22 +1,19 @@
 import heapq
-import multiprocessing
-import os
 import threading
 import time
 from multiprocessing import Process
-
-import pika
-
+from cython_modules import distance_calculator
 from network.sharedqueue import SharedQueue
 
 
 class Node(Process):
-    def __init__(self, node_id, node_location, fileset, shared_dict):
+    def __init__(self, node_id, node_locations, fileset, ohs_map, adj_list):
         try:
             super().__init__()
             self.node_id = node_id
-            self.node_location = node_location
-            self.shared_dict = shared_dict
+            self.node_locations = node_locations
+            self.ohs_map = ohs_map
+            self.adj_list = adj_list
             self.fileset = fileset
             self.max_capacity = 500
             self.request_amount = 0
@@ -73,10 +70,13 @@ class Node(Process):
             # print(f"Node{self.node_id} access amount = {self.local_queue.qsize()}")
             # print(f"Node{self.node_id} node load = {self.calculate_node_load()}")
             # print(f"Node{self.node_id} ohs = {self.curr_ohs}")
-            self.request_replication()
-            self.shared_dict[self.node_id] = self.curr_ohs
-            if self.node_id == 1:
-                print("Node states: ", self.shared_dict)
+            self.start_replication()
+            self.ohs_map[self.node_id] = self.curr_ohs
+            if self.node_id == 2:
+                print("Node states: ", self.ohs_map)
+            if self.curr_ohs >= 0.7:
+                print(f"creating replica for node{self.node_id}")
+                placement_node_id = self.get_optimal_neighbor()
             time.sleep(5)
 
     def calculate_weights(self):
@@ -100,11 +100,11 @@ class Node(Process):
         self.curr_ohs = overheating_similarity
         return overheating_similarity
 
-    def overheating_similarity_membership(self, curr_ohs):
-        beta = 1
-        print("beta ", beta)
-        ohs_member = 100 // (1 + (1 / beta * pow((curr_ohs - self.phi), 2)))
-        print("ohs member", ohs_member)
+    def overheating_similarity_membership(self):
+        beta = 50
+        ohs_member = 100 // (1 + ((self.curr_ohs - self.phi) * (self.curr_ohs - self.phi) * (beta)))
+        if self.node_id == 2:
+            print(f"ohs member {self.node_id}", ohs_member)
         return 1 if self.alpha <= ohs_member else 0
 
     def accept_input(self, filename):
@@ -122,7 +122,7 @@ class Node(Process):
             print("Node Overloaded")
             print("___________")
         if self.overheating_similarity_membership(curr_ohs):
-            self.create_replica()
+            self.get_optimal_neighbor()
         else:
             pass
             # print("Replica creation not required")
@@ -140,12 +140,57 @@ class Node(Process):
     #     # print("___________")
 
     def create_replica(self, fild_id):
-        print("Replica created")
 
-    def request_replication(self):
+        print("Replica created", self)
+
+    def start_replication(self):
         pass
 
-    def get_neighbours(self):
-        pass
+    def get_optimal_neighbor(self, file_id):
+        """
+        Calculates the optimal neighbor based on the decreasing order of priority
+        1. Node with the lowest overheating similarity
+        2. Node with the highest degree
+        3. Node that is nearest to current node
+        """
+        nodes_ohs = [value for key, value in sorted(self.ohs_map.items())]
+        max_ohs = max(nodes_ohs)
+        nodes_ohs = [ohs / max_ohs for ohs in nodes_ohs]
+        print("node_ohs=", nodes_ohs)
+
+        nodes_degree = [len(value) for key, value in sorted(self.adj_list.items())]
+        max_degree = max(nodes_degree)
+        nodes_degree = [deg / max_degree for deg in nodes_degree]
+        print("nodes_degree=", nodes_degree)
+
+        nodes_dist = []
+        curr_location = self.node_locations.get(self.node_id)
+        for node, location in sorted(self.node_locations.items()):
+            dist = distance_calculator.haversine_distance(curr_location[0], curr_location[1],
+                                                          location[0], location[1])
+            nodes_dist.append(dist)
+        max_dist = max(nodes_dist)
+        nodes_dist = [dist / max_dist for dist in nodes_dist]
+        print("nodes_dist=", nodes_dist)
 
 
+        scores = {}
+        for neighbor_id in self.node_locations.keys():
+            if self.node_id != neighbor_id:
+                dist = nodes_dist[neighbor_id - 1]
+                overheat = 1 - nodes_ohs[neighbor_id - 1]
+                degree = nodes_degree[neighbor_id - 1]
+                score = 0.75 * overheat + 0.15 * degree + 0.1 * dist
+                # curr_score = score
+                # if curr_score > best_score:
+                #     best_score = curr_score
+                #     best_neighbor = neighbor_id
+                scores[neighbor_id] = score
+
+        best_score = float("-inf")
+        best_neighbor = None
+        for neighbor, score in scores.items():
+
+
+        print("best_neighbor=", best_neighbor)
+        return best_neighbor
