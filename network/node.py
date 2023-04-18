@@ -1,17 +1,22 @@
 import heapq
+import multiprocessing
+import os
 import threading
 import time
-from multiprocessing import Queue
-from queue import Queue
+from multiprocessing import Process
 
 import pika
 
+from network.sharedqueue import SharedQueue
 
-class Node(threading.Thread):
-    def __init__(self, node_id, fileset):
+
+class Node(Process):
+    def __init__(self, node_id, node_location, fileset, shared_dict):
         try:
             super().__init__()
             self.node_id = node_id
+            self.node_location = node_location
+            self.shared_dict = shared_dict
             self.fileset = fileset
             self.max_capacity = 500
             self.request_amount = 0
@@ -22,7 +27,7 @@ class Node(threading.Thread):
             self.eps = 100
             self.curr_ohs = 0
             self.connection = None
-            self.local_queue = Queue()
+            self.local_queue = SharedQueue()
             self.weight_pq = []
             self.file_metadata = {file: [] for file in self.fileset}
             self.weights = dict()
@@ -30,51 +35,48 @@ class Node(threading.Thread):
             print(f"Error while initializing Node{node_id}")
 
     def run(self):
-        puller_thread = threading.Thread(target=self.pull_from_queue)
+        print(f"Node{self.node_id} has started and ready to accept requests...")
+        # puller_thread = threading.Thread(target=self.pull_from_queue)
         processor_thread = threading.Thread(target=self.dequeue_from_local_queue)
-        background_thread = threading.Thread(target=self.calculations)
-        if self.node_id == 1:
-            puller_thread.start()
-            processor_thread.start()
-            background_thread.start()
+        background_thread = threading.Thread(target=self.background_calculations)
+        # puller_thread.start()
+        processor_thread.start()
+        background_thread.start()
 
-    def callback(self, ch, method, properties, body):
-        self.local_queue.put(body)
+    def __str__(self):
+        return f"(Node{self.node_id}, PID={self.pid})"
 
-    def pull_from_queue(self):
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host="localhost"))
-        channel = self.connection.channel()
-        for file in self.fileset:
-            queue_name = f"queue_{file}"
-            channel.queue_declare(queue=queue_name)
-            channel.queue_bind(queue=queue_name, exchange="amq.direct", routing_key=queue_name)
-            channel.basic_consume(queue=queue_name, auto_ack=True, on_message_callback=self.callback)
-            print(f"Node{self.node_id} subscribed to {queue_name}")
-        channel.start_consuming()
+    def enqueue_request(self, request):
+        self.local_queue.put(request)
 
     def dequeue_from_local_queue(self):
         while True:
             try:
-                file_id = self.local_queue.get()
-                file_id = int(file_id.decode())
-                curr_time = time.time()
-                self.file_metadata[file_id].append(curr_time)
-                # print("queued jobs = ", self.local_queue.qsize())
-                time.sleep(0.075)
+                if not self.local_queue.empty():
+                    request = self.local_queue.get()
+                    # print(f"Node{self.node_id} received request {request}")
+                    time.sleep(0.075)
             except Exception as e:
-                print("Error occurred", e)
+                print(f"Error occurred in node{self.node_id}", e)
 
-    def calculations(self):
+    def get_heartbeat(self):
+        return self.curr_ohs
+
+    def background_calculations(self):
         while True:
-            self.calculate_overheating_similarity()
+            self.curr_ohs = self.calculate_overheating_similarity()
             self.calculate_weights()
-            top_items = heapq.nlargest(1, self.weights.items(), key=lambda x: x[1])
+            top_file = heapq.nlargest(1, self.weights.items(), key=lambda x: x[1])
             # print(f"Node{self.node_id} largest = {top_items}")
             # print(f"Node{self.node_id} weights = {self.weights}")
             # print(f"Node{self.node_id} file metadata = {self.file_metadata}")
             # print(f"Node{self.node_id} access amount = {self.local_queue.qsize()}")
             # print(f"Node{self.node_id} node load = {self.calculate_node_load()}")
-            print(f"Node{self.node_id} ohs = {self.curr_ohs}")
+            # print(f"Node{self.node_id} ohs = {self.curr_ohs}")
+            self.request_replication()
+            self.shared_dict[self.node_id] = self.curr_ohs
+            if self.node_id == 1:
+                print("Node states: ", self.shared_dict)
             time.sleep(5)
 
     def calculate_weights(self):
@@ -83,7 +85,7 @@ class Node(threading.Thread):
             access_weight = 0
             for t in timestamps:
                 time_diff = current_time - t
-                access_weight += pow(2, -time_diff/100)
+                access_weight += pow(2, -time_diff / 100)
             self.weights[file] = access_weight
             # self.add_to_priority_queue(file, access_weight)
 
@@ -126,6 +128,9 @@ class Node(threading.Thread):
             # print("Replica creation not required")
             # print("___________")
 
+    def add_request(self):
+        pass
+
     # def add_to_priority_queue(self, filename, weight):
     #     # self.weight_pq.put((weight, filename))
     #     for file, weight in self.weights.items():
@@ -134,5 +139,13 @@ class Node(threading.Thread):
     #         heapq.heappush(self.weight_pq, (file, weight))
     #     # print("___________")
 
-    def create_replica(self):
+    def create_replica(self, fild_id):
         print("Replica created")
+
+    def request_replication(self):
+        pass
+
+    def get_neighbours(self):
+        pass
+
+
