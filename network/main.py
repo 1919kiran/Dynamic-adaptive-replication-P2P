@@ -1,6 +1,6 @@
 import time
 from network.request_generator import RequestGenerator
-from network.load_balancer import LoadBalancer
+from network.load_balancer import NetworkManager
 from network.node import Node
 from location import get_node_locations
 
@@ -15,7 +15,7 @@ if __name__ == "__main__":
     }
 
     request_generator = RequestGenerator(num_files=num_files)
-    load_balancer = LoadBalancer(num_nodes=num_nodes, num_files=num_files)
+    load_balancer = NetworkManager(num_nodes=num_nodes, num_files=num_files)
 
     adj_list = load_balancer.create_adjacency_list()
     file_mapping = load_balancer.create_file_mapping()

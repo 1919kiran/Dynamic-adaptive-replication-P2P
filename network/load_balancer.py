@@ -2,27 +2,33 @@ import math
 import random
 import threading
 import json
+import time
+
 import pika
 import sys
 from multiprocessing import Manager
 from network.node import Node
+from cython_modules import distance_calculator
+from util import normalize
 
 
-class LoadBalancer(threading.Thread):
+class NetworkManager(threading.Thread):
     def __init__(self, num_nodes, num_files):
         try:
             super().__init__()
+            self._shared_memory = Manager()
             self.connection = None
             self.channel = None
             self.num_nodes = num_nodes
             self.num_files = num_files
             self.nodes = []
-            self.file_mapping = dict()
-            self.node_mapping = dict()
-            self.node_locations = dict()
-            self.node_pool = dict()
-            self.ohs_map = Manager().dict()  # dictionary of node to ohs
-            self.adj_list = Manager().dict()  # dictionary of node to set of nodes
+            self.file_mapping = self._shared_memory.dict()
+            self.node_mapping = self._shared_memory.dict()
+            self.node_locations = self._shared_memory.dict()
+            self.node_pool = self._shared_memory.dict()
+            self.acceptance_state = self._shared_memory.dict()
+            self.ohs_map = self._shared_memory.dict()  # dictionary of node to ohs
+            self.adj_list = self._shared_memory.dict()  # dictionary of node to set of nodes
         except Exception as e:
             print("Error while initializing the load balancer")
 
@@ -35,31 +41,61 @@ class LoadBalancer(threading.Thread):
         self.channel.queue_bind(queue=queue_name, exchange="amq.direct", routing_key=queue_name)
         self.channel.basic_consume(queue=queue_name, auto_ack=True, on_message_callback=self.callback)
         self.channel.start_consuming()
+        # background_process = threading.Thread(target=self.background_process)
+        # background_process.start()
 
     def callback(self, ch, method, properties, body):
+        # print(self.file_mapping)
         request_body = json.loads(body.decode())
         file_id = request_body["file_id"]
-        node_id = self.get_nearby_node(file_id=request_body["file_id"], request_origin=request_body["origin"])
-        # print(f"File mapping for file{file_id}: {self.file_mapping.get(file_id)}")
-        if node_id is not None:
+        node_ids = self.get_ordered_nodes(file_id=request_body["file_id"], request_origin=request_body["origin"])
+        i = 0
+        for node_id in node_ids:
+            i += 1
             node_pid = self.node_pool.get(node_id)
-            node = next((n for n in self.nodes if n.pid == node_pid), None)
+            # node = next((n for n in self.nodes if n.pid == node_pid and self.acceptance_state[node_id]), None)
+            node = None
+            for n in self.nodes:
+                if n.pid == node_pid and self.acceptance_state[node_id]:
+                    node = n
             if node is not None:
+                # print(f"Sending file{file_id} to Node{node_id}")
                 node.enqueue_request(request_body)
+                return
+            elif i != len(node_ids):
+                continue
+            else:
+                print("node_ids = ", node_ids)
+                print("All nodes are overloaded. Pausing for 5 secs")
+                time.sleep(5)
+
             # print(f"Nearby node for file{request_body['file_id']} at {request_body['origin']} is Node{node_id}")
 
-    def get_nearby_node(self, file_id, request_origin):
-        min_distance = sys.maxsize
+    def get_ordered_nodes(self, file_id, request_origin):
         if self.file_mapping.get(file_id) is None:
             return None
-        nearby_node = None
+
+        node_distances = {}
+        node_ohs = {}
         for node_id in self.file_mapping.get(file_id):
             node_location = self.node_locations.get(node_id)
-            node_origin_distance = compute_distance(request_origin, node_location)
-            if node_origin_distance < min_distance:
-                min_distance = node_origin_distance
-                nearby_node = node_id
-        return nearby_node
+            node_origin_distance = distance_calculator.euclidean_distance(request_origin[0], request_origin[1],
+                                                                          node_location[0], node_location[1])
+            node_distances[node_id] = node_origin_distance
+            node_ohs[node_id] = self.ohs_map.get(node_id)
+
+        normalized_distances = normalize(list(node_distances.values()))
+        normalized_loads = normalize(list(node_ohs.values()))
+        normalized_distance = {node: dist for node, dist in zip(node_distances.keys(), normalized_distances)}
+        normalized_ohs_dict = {node: load for node, load in zip(node_ohs.keys(), normalized_loads)}
+
+        def sorting_key(node):
+            return normalized_distance[node] + normalized_ohs_dict[node]
+
+        nodes = list(node_distances.keys())
+        sorted_nodes = sorted(nodes, key=sorting_key)
+
+        return sorted_nodes
 
     def create_message_queues(self):
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host="localhost"))
@@ -75,6 +111,7 @@ class LoadBalancer(threading.Thread):
         # print("Job Queue deleted successfully.")
 
     """ Returns a fileset of a node based on node_id """
+
     def get_files_by_nodeid(self, node_id):
         return self.node_mapping.get(node_id)
 
@@ -105,14 +142,18 @@ class LoadBalancer(threading.Thread):
         self.file_mapping = {
             1: [1, 2, 3],
             2: [1, 4, 5],
-            3: [1, 2, 3, 4, 5]
+            3: [1, 4, 3]
         }
-        for key, values in self.file_mapping.items():
-            for value in values:
-                self.node_mapping.setdefault(value, []).append(key)
+        for file_id, node_ids in self.file_mapping.items():
+            for node_id in node_ids:
+                if node_id not in self.node_mapping:
+                    self.node_mapping[node_id] = []
+                files = self.node_mapping[node_id]
+                files.append(file_id)
+                self.node_mapping[node_id] = files
         print("File mapping and node mapping is created")
-        print(self.file_mapping)
-        print(self.node_mapping)
+        print("File to node mapping: ", self.file_mapping)
+        print("Node to file mapping: ", self.node_mapping)
         return self.file_mapping
 
     def select_node(self, filename):
@@ -132,19 +173,26 @@ class LoadBalancer(threading.Thread):
             fileset = self.get_files_by_nodeid(i)
             node = Node(node_id=i,
                         node_locations=self.node_locations,
-                        fileset=fileset,
+                        node_file_mapping=self.node_mapping,
+                        file_node_mapping=self.file_mapping,
                         ohs_map=self.ohs_map,
-                        adj_list=self.adj_list
+                        adj_list=self.adj_list,
+                        acceptance_state=self.acceptance_state
                         )
             self.nodes.append(node)
         for node in self.nodes:
             node.start()
         i = 1
         for node in self.nodes:
+            self.acceptance_state[i] = True
             self.node_pool[i] = node.pid
             i += 1
         print("Node pool: ", self.node_pool)
 
+    def background_process(self):
+        while True:
+            print("LB: ", self.file_mapping)
+            time.sleep(5)
 
-def compute_distance(loc1, loc2):
-    return math.sqrt((loc2[0] - loc1[0]) ** 2 + (loc2[1] - loc1[1]) ** 2)
+    def get_ranked_nodes(self):
+        node_distances = [value for key, value in sorted(self.ohs_map.items())]
