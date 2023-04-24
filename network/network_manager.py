@@ -1,14 +1,13 @@
-import math
+import json
 import random
 import threading
-import json
 import time
+from multiprocessing import Manager
 
 import pika
-import sys
-from multiprocessing import Manager
-from network.node import Node
+
 from cython_modules import distance_calculator
+from network.node import Node
 from util import normalize
 
 
@@ -30,12 +29,12 @@ class NetworkManager(threading.Thread):
             self.ohs_map = self._shared_memory.dict()  # dictionary of node to ohs
             self.adj_list = self._shared_memory.dict()  # dictionary of node to set of nodes
         except Exception as e:
-            print("Error while initializing the load balancer")
+            print("Error while initializing the network manager")
 
     def run(self):
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host="localhost"))
         self.channel = self.connection.channel()
-        print("Load balancer has started and connected to message queue...")
+        print("Network manager has started and connected to message queue...")
         queue_name = "job_queue"
         self.channel.queue_declare(queue=queue_name)
         self.channel.queue_bind(queue=queue_name, exchange="amq.direct", routing_key=queue_name)
