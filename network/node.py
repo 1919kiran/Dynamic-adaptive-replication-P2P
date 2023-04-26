@@ -37,6 +37,7 @@ class Node(Process):
                 for file in self.file_set:
                     self.file_metadata[file] = []
             self.weights = dict()
+            self.curr_node_location = self.node_locations.get(self.node_id)
         except Exception as e:
             print(f"Error while initializing Node{node_id}", e)
 
@@ -60,11 +61,18 @@ class Node(Process):
                 if not self.local_queue.empty():
                     request = self.local_queue.get()
                     file_id = int(request.get("file_id"))
+                    file_origin = request.get("origin")
                     if self.file_metadata.get(file_id) is not None:
                         file_accesses = self.file_metadata.get(file_id)
                         # Store the timestamp of request for this file (used for file weight calculation)
                         file_accesses.append(int(time.time()))
                         self.file_metadata[file_id] = file_accesses
+                        # Calculate the latency of this file
+                        latency = distance_calculator.round_trip_time(
+                            file_origin[0], file_origin[1],
+                            self.curr_node_location[0], self.curr_node_location[1]
+                        )
+                        pass
                     time.sleep(0.075)
             except Exception as e:
                 print(f"Error occurred in node{self.node_id}", e)

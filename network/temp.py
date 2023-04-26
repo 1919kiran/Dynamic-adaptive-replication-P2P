@@ -1,22 +1,29 @@
-import multiprocessing as mp
-import random
-import time
+from cython_modules import distance_calculator
 
-# Define the data transfer process
-def data_transfer(src, dest):
-    data_size = random.randint(100, 1000)  # bytes
-    transfer_time = random.uniform(0.1, 1.0)  # seconds
-    time.sleep(transfer_time)  # simulate transfer time
-    bandwidth = data_size / transfer_time  # calculate bandwidth
-    print(f"Node {src} to Node {dest}: Bandwidth = {bandwidth} bytes/second")
+import math
 
-# Define the network topology
-nodes = [mp.Process(target=data_transfer, args=(i, j)) for i in range(10) for j in range(i+1, 10)]
 
-# Start the processes
-for node in nodes:
-    node.start()
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """
+    Calculate the haversine distance between two points on the earth (specified in decimal degrees)
+    """
+    # convert decimal degrees to radians
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
 
-# Wait for the processes to finish
-for node in nodes:
-    node.join()
+    # haversine formula
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    c = 2 * math.asin(math.sqrt(a))
+    r = 6371000  # Radius of earth in kilometers. Use 3956 for miles
+    return c * r
+
+
+
+dist = distance_calculator.haversine_distance(6.607662345511912, -113.06342330255615, -53.754444543459236, 68.6823710697071)
+
+dist2 = haversine_distance(6.607662345511912, -113.06342330255615, -53.754444543459236, 68.6823710697071)
+
+latency = distance_calculator.round_trip_time(6.607662345511912, -113.06342330255615, -53.754444543459236, 68.6823710697071)
+
+print(latency)
