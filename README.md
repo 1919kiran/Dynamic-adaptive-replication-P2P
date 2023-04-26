@@ -1,6 +1,6 @@
 # Enhancing the Dynamic Adaptive Replication Strategy for P2P Systems using the Time-Based Decaying Function
 
-## CMPE 295 Fall 2022 Wang Group 2 (Research)
+## CMPE 295 Research Master's Project
 
 ## Background:
 Availability is one of the most important aspects of a peer-to-peer (P2P) system. In order to maintain the high availability of data, replication strategies are used to create multiple copies of the data file. As the number of replicas increases, the availability and performance of the system also increases, but it also increases the cost of maintaining the replicas. Below are the factors that influence data replication:
