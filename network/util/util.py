@@ -1,4 +1,4 @@
-from access_pattern import FileAccessData
+from network.requests.access_pattern import FileAccessData
 
 
 def create_file_access_data(access_pattern):

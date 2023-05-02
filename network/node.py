@@ -4,7 +4,7 @@ import time
 from multiprocessing import Process
 from cython_modules import distance_calculator
 from network.sharedqueue import SharedQueue
-from util import normalize
+from network.util.util import normalize
 
 
 class Node(Process):
@@ -35,14 +35,14 @@ class Node(Process):
             self.file_metadata = {}
             if self.file_set is not None:
                 for file in self.file_set:
-                    self.file_metadata[file] = []
+                    self.file_metadata[file] = ([], [])
             self.weights = dict()
             self.curr_node_location = self.node_locations.get(self.node_id)
         except Exception as e:
-            print(f"Error while initializing Node{node_id}", e)
+            print(f"[node {self.node_id}] Error while initializing Node{node_id}", e)
 
     def run(self):
-        print(f"Node{self.node_id} has started and ready to accept requests...")
+        print(f"[node {self.node_id}] Node{self.node_id} has started and ready to accept requests...")
         processor_thread = threading.Thread(target=self.dequeue_from_local_queue)
         background_thread = threading.Thread(target=self.background_calculations)
         processor_thread.start()
@@ -59,23 +59,31 @@ class Node(Process):
         while True:
             try:
                 if not self.local_queue.empty():
+                    low = 0.05
+                    high = 0.1
+                    time_for_replication = 0.075
+
                     request = self.local_queue.get()
                     file_id = int(request.get("file_id"))
                     file_origin = request.get("origin")
                     if self.file_metadata.get(file_id) is not None:
-                        file_accesses = self.file_metadata.get(file_id)
+                        file_meta = self.file_metadata.get(file_id)
+                        file_accesses = file_meta[0]
+                        file_latencies = file_meta[1]
                         # Store the timestamp of request for this file (used for file weight calculation)
                         file_accesses.append(int(time.time()))
-                        self.file_metadata[file_id] = file_accesses
+                        self.file_metadata[file_id] = file_meta
                         # Calculate the latency of this file
                         latency = distance_calculator.round_trip_time(
                             file_origin[0], file_origin[1],
                             self.curr_node_location[0], self.curr_node_location[1]
                         )
-                        pass
-                    time.sleep(0.075)
+                        file_latencies.append(latency + time_for_replication)
+                        file_meta = (file_accesses, file_latencies)
+                        self.file_metadata[file_id] = file_meta
+                    time.sleep(time_for_replication)
             except Exception as e:
-                print(f"Error occurred in node{self.node_id}", e)
+                print(f"[node {self.node_id}] Error occurred in node{self.node_id}", e)
 
     def background_calculations(self):
         """
@@ -91,33 +99,35 @@ class Node(Process):
             self.curr_ohs = self.calculate_overheating_similarity()
             self.ohs_map[self.node_id] = self.curr_ohs
             self.calculate_weights()
-
+            avg_latency = self.calculate_latency()
             if self.node_id == 2:
-                print("Node ohs: ", self.ohs_map)
+                print(f"[node {self.node_id}] Node ohs: ", self.ohs_map)
                 # print("Node acceptance state: ", self.acceptance_state)
-                print("Queue size = ", self.local_queue.qsize())
-
+                print(f"[node {self.node_id}] Queue size = {self.local_queue.qsize()}")
+                print(f"[node {self.node_id}] Avg latency = {avg_latency} ms")
+                bw = self.available_bandwidth - (self.local_queue.qsize()*5)
+                if bw < 0:
+                    bw = 0
+                print(f"[node {self.node_id}] Available bandwidth = {bw} Mb")
+                print()
             if self.curr_ohs >= self.phi:
                 # Check if the node is overloaded. If yes, then get the hot file, calculate optimal placement node
                 # and begin replication
-                print(f"Creating replica for Node{self.node_id}...")
                 hot_file = heapq.nlargest(1, self.weights.items(), key=lambda x: x[1])
                 hot_file = hot_file[0][0]
                 placement_nodes = self.get_optimal_neighbors(hot_file)
                 if len(placement_nodes) == 0:
                     self.acceptance_state[self.node_id] = False
-                    print(f"Cannot replicate File{hot_file} from Node{self.node_id} as there is no availability "
-                          f"of nodes")
+                    print(f"[node {self.node_id}] Cannot replicate File{hot_file} from Node{self.node_id} as there is no availability of nodes")
                 for placement_node_id in placement_nodes:
                     self.start_replication(hot_file, placement_node_id)
                     self.update_mapping(placement_node_id, hot_file)
                     break
-            elif self.curr_ohs < self.phi and self.acceptance_state[self.node_id] == False:
+            elif self.curr_ohs < self.phi and not self.acceptance_state[self.node_id]:
                 # If the node is not overloaded and it's acceptance state was false, it implies now it is ready to
                 # accept new requests.
-                print(f"Node{self.node_id} is now ready to accept new requests...")
+                print(f"[node {self.node_id}] Node{self.node_id} is now ready to accept new requests...")
                 self.acceptance_state[self.node_id] = True
-
             time.sleep(5)
 
     def enqueue_request(self, request):
@@ -131,12 +141,28 @@ class Node(Process):
         Calculates weight of each file based on TBDF by using the store request timestamps.
         """
         current_time = time.time()
-        for file, timestamps in self.file_metadata.items():
+        for file, file_meta in self.file_metadata.items():
             access_weight = 0
+            timestamps = file_meta[0]
             for t in timestamps:
                 time_diff = current_time - t
                 access_weight += pow(2, -time_diff / 100)
             self.weights[file] = access_weight
+
+    def calculate_latency(self):
+        count = 0
+        avg_latency = 0
+        for file, file_meta in self.file_metadata.items():
+            access_weight = 0
+            latencies = file_meta[1]
+            n = len(latencies)
+            if n != 0:
+                avg_latency += sum(latencies) / n
+            count += 1
+        if count != 0:
+            return avg_latency / count
+        else:
+            return None
 
     def calculate_node_load(self):
         self.request_amount = self.local_queue.qsize() + self.forwarding_bandwidth
@@ -153,14 +179,15 @@ class Node(Process):
         beta = 50
         ohs_member = 100 // (1 + ((self.curr_ohs - self.phi) * (self.curr_ohs - self.phi) * (beta)))
         if self.node_id == 2:
-            print(f"ohs member {self.node_id}", ohs_member)
+            print(f"[node {self.node_id}] ohs member {self.node_id}", ohs_member)
         return 1 if self.alpha <= ohs_member else 0
 
     def start_replication(self, file_id, placement_node_id):
         """
         Handles replication of the file from current node to the given placement node.
         """
-        print(f"File transfer for File{file_id} is in progress from Node{self.node_id} to Node{placement_node_id}")
+        print(
+            f"[node {self.node_id}] File transfer for File{file_id} is in progress from Node{self.node_id} to Node{placement_node_id}")
         time.sleep(1)
 
     def get_optimal_neighbors(self, file_id):
@@ -188,16 +215,24 @@ class Node(Process):
         normalized_dist_list = {node: dist for node, dist in zip(nodes_dist.keys(), normalized_dist)}
 
         def sorting_key(node):
-            return 0.75*normalized_ohs_list[node] + 0.15*normalized_degree_list[node] + 0.1*normalized_dist_list[node]
+            return 0.75 * normalized_ohs_list[node] + 0.15 * normalized_degree_list[node] + 0.1 * normalized_dist_list[
+                node]
 
-        nodes = list(nodes_ohs.keys())
+        nodes = []
+        for node_id, connections in self.adj_list.items():
+            if self.file_not_present_in_placement_node(file_id, placement_node_id=node_id) and self.ohs_map.get(node_id) < self.phi and self.is_connected(node_id):
+                nodes.append(node_id)
+        # print(f"[node {self.node_id}] nodes = {nodes}")
         sorted_nodes = sorted(nodes, key=sorting_key)
-        for node_id in sorted_nodes:
-            # Remove overloaded nodes and the nodes where file is already present
-            if file_id in self.node_file_mapping.get(node_id) or self.ohs_map.get(node_id) >= self.phi:
-                sorted_nodes.remove(node_id)
-        print()
-
+        # print(f"[node {self.node_id}] sorted nodes before removing = {sorted_nodes}")
+        # for node_id in sorted_nodes:
+        #     # Remove overloaded nodes and the nodes where file is already present
+        #     c1 = self.file_present_in_placement_node(file_id, placement_node_id=node_id)
+        #     c2 = self.ohs_map.get(node_id) >= self.phi
+        #     c3 = self.is_connected(node_id)
+        #     if c1 or c2 or c3:
+        #         sorted_nodes.remove(node_id)
+        # print(f"[node {self.node_id}] sorted nodes = {sorted_nodes}")
         return sorted_nodes
 
     def update_mapping(self, placement_node_id, file_id):
@@ -214,5 +249,19 @@ class Node(Process):
             nodes.append(placement_node_id)
         self.file_node_mapping[file_id] = nodes
 
-        print(f"Node{self.node_id}: ", self.node_file_mapping)
-        print(f"Updated the file and node mapping of Node{placement_node_id}")
+        print(f"[node {self.node_id}] Updated the file and node mapping of Node{placement_node_id}. New file to node mapping is: {self.file_node_mapping}")
+
+    def is_connected(self, placement_node_id):
+        connections = self.adj_list.get(self.node_id)
+        if placement_node_id in connections:
+            return True
+        else:
+            return False
+
+    def file_not_present_in_placement_node(self, file_id, placement_node_id):
+        # print(f"[node {self.node_id}]  target node={placement_node_id} "
+        #       f"and hotfile={file_id} and res = {file_id in self.node_file_mapping.get(placement_node_id)}")
+        if placement_node_id in self.file_node_mapping.get(file_id):
+            return False
+        else:
+            return True

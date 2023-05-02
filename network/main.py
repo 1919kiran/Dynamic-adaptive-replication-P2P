@@ -1,9 +1,8 @@
 import time
-from network.request_generator import RequestGenerator
-from network.network_manager import NetworkManager
-from network.node import Node
-from location import get_node_locations
 
+from network.requests.location import get_node_locations
+from network.network_manager import NetworkManager
+from network.requests.request_generator import RequestGenerator
 
 if __name__ == "__main__":
     num_nodes = 5

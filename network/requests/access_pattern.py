@@ -50,7 +50,7 @@ class FileAccessData:
     request_timestamps = None
 
     def __init__(self):
-        with open("config.yml", "r") as file:
+        with open("../config.yml", "r") as file:
             data = yaml.full_load(file)
         self.config = data.get("file_data")
         self.request_timestamps = queue.SharedQueue(self.config.get("qsize"))
@@ -81,7 +81,7 @@ class FileAccessData:
 class AccessPatternGenerator:
     def __init__(self):
         c = dict()
-        with open("config.yml", "r") as file:
+        with open("../config.yml", "r") as file:
             c = yaml.full_load(file)
         self.config = c.get("access_pattern")
 

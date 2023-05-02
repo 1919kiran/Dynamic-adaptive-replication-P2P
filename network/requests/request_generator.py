@@ -1,10 +1,11 @@
 import csv
 import datetime
+import os
 import random
 import threading
 import time
 import json
-from location import get_location
+from .location import get_location
 import pika
 
 
@@ -23,7 +24,7 @@ class RequestGenerator(threading.Thread):
         print("Request Generator has started and connected to message queue...")
         first_epoch = None
         second_epoch = None
-        with open("../input/pattern.csv", newline="") as csvfile:
+        with open("requests/pattern.csv", newline="") as csvfile:
             reader = csv.reader(csvfile, delimiter=",", quotechar='"')
             next(reader)
             for row in reader:

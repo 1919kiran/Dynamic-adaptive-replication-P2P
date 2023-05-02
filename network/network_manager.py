@@ -8,7 +8,7 @@ import pika
 
 from cython_modules import distance_calculator
 from network.node import Node
-from util import normalize
+from network.util.util import normalize
 
 
 class NetworkManager(threading.Thread):
@@ -64,7 +64,7 @@ class NetworkManager(threading.Thread):
             elif i != len(node_ids):
                 continue
             else:
-                print("node_ids = ", node_ids)
+                # print("node_ids = ", node_ids)
                 print("All nodes are overloaded. Pausing for 5 secs")
                 time.sleep(5)
 
@@ -192,6 +192,3 @@ class NetworkManager(threading.Thread):
         while True:
             print("LB: ", self.file_mapping)
             time.sleep(5)
-
-    def get_ranked_nodes(self):
-        node_distances = [value for key, value in sorted(self.ohs_map.items())]

@@ -7,7 +7,7 @@ from tzlocal import get_localzone
 class DecayFunctionCalculator:
     def __init__(self):
         c = dict()
-        with open("config.yml", "r") as file:
+        with open("../config.yml", "r") as file:
             c = yaml.full_load(file)
         self.config = c.get("decay_function")
 
