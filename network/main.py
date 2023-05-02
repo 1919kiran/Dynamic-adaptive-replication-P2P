@@ -7,11 +7,6 @@ from network.requests.request_generator import RequestGenerator
 if __name__ == "__main__":
     num_nodes = 5
     num_files = 3
-    redis_server_creds = {
-        "host": "localhost",
-        "port": 6379,
-        "db": 0
-    }
 
     request_generator = RequestGenerator(num_files=num_files)
     nw_manager = NetworkManager(num_nodes=num_nodes, num_files=num_files)

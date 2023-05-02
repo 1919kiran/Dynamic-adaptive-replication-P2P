@@ -2,6 +2,9 @@ import heapq
 import threading
 import time
 from multiprocessing import Process
+import json
+import pika
+
 from cython_modules import distance_calculator
 from network.sharedqueue import SharedQueue
 from network.util.util import normalize
@@ -23,16 +26,19 @@ class Node(Process):
             self.request_amount = 0
             self.forwarding_bandwidth = 0
             self.available_bandwidth = 1000
+            self.curr_bandwidth = 0
+            self.avg_latency = 0
             self.theta = 0.3
             self.phi = 0.7
             self.alpha = 70
             self.eps = 100
             self.curr_ohs = 0
-            self.connection = None
-            self.local_queue = SharedQueue()
             self.weight_pq = []
             self.file_set = self.node_file_mapping.get(self.node_id)
             self.file_metadata = {}
+            self.connection = None
+            self.channel = None
+            self.local_queue = SharedQueue()
             if self.file_set is not None:
                 for file in self.file_set:
                     self.file_metadata[file] = ([], [])
@@ -42,6 +48,8 @@ class Node(Process):
             print(f"[node {self.node_id}] Error while initializing Node{node_id}", e)
 
     def run(self):
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host="localhost"))
+        self.channel = self.connection.channel()
         print(f"[node {self.node_id}] Node{self.node_id} has started and ready to accept requests...")
         processor_thread = threading.Thread(target=self.dequeue_from_local_queue)
         background_thread = threading.Thread(target=self.background_calculations)
@@ -94,20 +102,22 @@ class Node(Process):
         4. Handling of replica creation opportune moment.
         5. Estimating the most optimal placement node once the opportune moment has arrived.
         6. Invoking file replication methods when the placement node is available for replication.
+        7. Publishing the node metrics to message queue.
         """
         while True:
             self.curr_ohs = self.calculate_overheating_similarity()
             self.ohs_map[self.node_id] = self.curr_ohs
             self.calculate_weights()
             avg_latency = self.calculate_latency()
-            if self.node_id == 2:
+            bw = self.available_bandwidth - (self.local_queue.qsize() * 5)
+            if bw < 0:
+                bw = 0
+            self.curr_bandwidth = bw
+            self.avg_latency = avg_latency
+            if self.node_id == 1:
                 print(f"[node {self.node_id}] Node ohs: ", self.ohs_map)
-                # print("Node acceptance state: ", self.acceptance_state)
                 print(f"[node {self.node_id}] Queue size = {self.local_queue.qsize()}")
                 print(f"[node {self.node_id}] Avg latency = {avg_latency} ms")
-                bw = self.available_bandwidth - (self.local_queue.qsize()*5)
-                if bw < 0:
-                    bw = 0
                 print(f"[node {self.node_id}] Available bandwidth = {bw} Mb")
                 print()
             if self.curr_ohs >= self.phi:
@@ -128,7 +138,10 @@ class Node(Process):
                 # accept new requests.
                 print(f"[node {self.node_id}] Node{self.node_id} is now ready to accept new requests...")
                 self.acceptance_state[self.node_id] = True
-            time.sleep(5)
+
+            # publish the metrics to message queue
+            self.publish_metrics()
+            time.sleep(1)
 
     def enqueue_request(self, request):
         """
@@ -265,3 +278,16 @@ class Node(Process):
             return False
         else:
             return True
+
+    def publish_metrics(self):
+        message_body = {
+            "node_id": self.node_id,
+            "ohs": self.curr_ohs,
+            "bandwidth": self.curr_bandwidth,
+            "avg_latency": self.avg_latency
+        }
+        message = json.dumps(message_body).encode("utf-8")
+        self.channel.basic_publish(exchange="",
+                                   routing_key="metrics_queue",
+                                   body=message)
+

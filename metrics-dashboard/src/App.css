@@ -1,0 +1,10 @@
+.App {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+table {
+  width: 100%;
+  text-align: center;
+}
