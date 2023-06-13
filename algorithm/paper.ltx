@@ -1,0 +1,137 @@
+\documentclass{IEEEtran}
+\ifCLASSINFOpdf
+\else
+\fi
+\usepackage{amssymb} %new add for \triangleq
+\usepackage[cmex10]{amsmath}
+\usepackage{algorithmic}
+\usepackage{array}
+\usepackage{url}
+\ifCLASSOPTIONcompsoc
+\usepackage[caption=false,font=normalsize,labelfon
+t=sf,textfont=sf]{subfig} \else
+\usepackage[caption=false,font=footnotesize]{subfig}
+\fi
+\usepackage{mdwmath}
+\usepackage{mdwtab}
+\usepackage{multirow}
+\usepackage{textgreek}
+\usepackage[ruled,vlined]{algorithm2e}
+\usepackage{graphicx}
+\usepackage{epstopdf}
+\newcommand{\figwidth}{0.75\linewidth}
+\newcommand{\figwidthsmall}{0.5\linewidth}
+\newcommand{\figwidtha}{0.7\linewidth}
+\newcommand{\figwidthb}{0.80\linewidth}
+\newcommand{\figwidthdouble}{0.5\linewidth}
+\newcommand{\figwidthtriple}{0.32\linewidth}
+\def\figref#1{Fig.~\ref{#1}}
+\def\secref#1{Section~\ref{#1}}
+\def\tabref#1{Table~\ref{#1}}
+\DeclareMathOperator{\trace}{trace}
+\graphicspath{ {./fig/} }
+\hyphenation{op-tical net-works semi-conduc-tor}
+
+\begin{document}
+
+\title{Enhancing the Dynamic Adaptive Replication Strategy for P2P Systems using Time-Based Decaying Function}
+
+
+% author names and affiliations
+\author{\IEEEauthorblockN{Abhiteja Mandava, Sai Kiran Madupu, Sai Santhosh Yamsani, Vineeth Reddy Govind} \\
+ \IEEEauthorblockA{Computer Engineering Department\\
+ San Jos\'{e} State University (SJSU)\\
+ San Jos\'{e}, CA, USA \\
+ Email: \{abhiteja.mandava, saikiran.madupu, saisanthosh.yamsani, vineethreddy.govind\}@sjsu.edu}
+ }
+ 
+% make the title area
+\maketitle
+
+\IEEEpeerreviewmaketitle
+
+\begin{abstract}
+Availability is one of the most important aspects of a peer-to-peer (P2P) system. To maintain the high availability of data, replication strategies are used to create multiple copies of the data file. As the number of replicas increases, the availability and performance of the system also increase, but it also comes with additional overhead, including the cost of maintaining the replicas. The factors influencing data replication are a) which file to replicate, b) when to replicate, and c) where to place the replicated file. Most replication strategies use fixed threshold values, which might lead to over replication. Dynamic Adaptive Replication Strategy (DARS) is one of the strategies that can achieve the highest availability while creating an optimal number of replicas. It addresses the problem of when to replicate the file based on the opportune moment and finds the optimal placement node using fuzzy clustering analysis. However, when deciding the set of files that need replicas, DARS gets the access amount of files from an array that stores them in descending order. It assumes that the files with the highest number of requests are more likely to cause an overloaded node (i.e., exceed the node’s available bandwidth) without considering the timestamps of those requests. Therefore, as timing information also plays a critical role in determining the future access pattern, it could lead to sub-optimal system performance when using DARS. To overcome the problem, we propose that we use a Time-Based Decaying Function (TBDF) to assign weights to the files instead of maintaining the array of files based on the descending access rate. The idea of temporal locality is used, according to which a data file that has recently been accessed is more likely to be reaccessed in the future. Thus, TBDF assigns more weight to more recent accesses to a data file than to older ones. It also reduces the weight and relevance of data file accesses as time passes. We expect the optimized DARS to result in fewer redundant replicas, further enhancing the system's performance. CloudSim simulator will be used to implement the proposed algorithm, and latency, bandwidth, and node utilization will be measured to test the efficacy of the proposed solution.
+\end{abstract}
+
+\begin{IEEEkeywords}
+data replication, peer-to-peer systems, weight-based replica selection.
+\end{IEEEkeywords}
+
+\section{Introduction}\label{sec:introduction}
+This project aims to design and develop a novel data replication strategy that achieves significantly better load balancing capabilities in a peer-to-peer (P2P) system than conventional replication strategies \cite{amjad_2012_a}. A P2P network is dynamically scalable, self-organized, and decentralized due to its architecture. P2P systems have many advantages over the traditional client-server model for data-intensive applications as they lack a single point of failure \cite{liu_2009_from}. As a result, they are becoming increasingly popular and are being used for applications such as climate modeling and earthquake monitoring \cite{heindl_2009_peertopeer}. Data replication is the process of making multiple copies of data and storing them at different locations. To achieve high scalability for a data-intensive application, the system must store the data across multiple nodes, thus making data replication an essential aspect of managing a P2P network. Furthermore, data replication increases the availability of data. If a node containing the requested file crashes, the request is served from other nodes holding the replica of the particular file. Additionally, replication also improves the system's overall performance as a request can be served from the node that is geographically closer to the origin of the request rather than a node that is far away.
+
+A node becomes overloaded when the number of requests exceeds the node's available bandwidth, making it unable to respond to the requests quickly. Data replication is an effective method to overcome the problem of node overloading, as it distributes the load across multiple peers \cite{shen_2008_ead} and results in lower latency. As a file that is most frequently requested can quickly exhaust the node's bandwidth, the conventional replication strategies copy this file to other nodes. These strategies use a predetermined fixed threshold for replica creation based on metrics like node load, and bandwidth \cite{shen_2008_ead}. When the node reaches predefined conditions, the hot file (a file that causes the node to become overloaded) on the overloaded node creates a replica and stores the replica on another node. However, these traditional solutions \cite{amjad_2012_a} may cause few risks \cite{shakarami_2021_data} under high-load situations.
+
+The first risk is pertaining to the replica creation time. When the node reaches or surpasses the predefined threshold, these methods create a replica. However, the node is already overloaded at this point, thereby increasing the number of overload nodes. As a result, finding the optimal time for replica creation is crucial. Another problem might occur during the replica placement process.  When an overloaded node makes a replica and stores it on another node, the placement node may also become overloaded, resulting in the aggregate effect of being overloaded. Therefore, selecting the best node to store the replica must be carefully considered. Lastly, there could also be a risk while choosing the replication file. The conventional methods replicate the files with the highest number of requests. However, the file may no longer be frequently accessed in the future, thus leading to stale replicas. Hence, it is essential to strategize which file to replicate.
+
+
+Dynamic Adaptive Replica Strategy (DARS) \cite{sun_2018_dars} addresses the problems of replica creation time and replica placement. First, the strategy obtains the replica creation opportune moment based on the node's overheating similarity (the probability that a node changes into an overloaded node). Then, it applies the fuzzy clustering analysis \cite{ling_2007_fuzzy} to find the optimal placement node. However, it selects the replication files based on the access frequency and does not consider the timestamps of the requests for the file. When deciding the set of files that need replica, DARS gets the access amount of files from an array that stores them in descending order. They assume that the files with the highest number of requests are more likely to cause an overloaded (i.e., exceed the node's available bandwidth) node without considering the timestamps of their requests. However, we found that this is not the optimal solution, as timing information also plays a critical role in determining the future access pattern. To further understand the problem, consider that files $F\textsubscript{1}$ and $F\textsubscript{2}$ have 50 and 30 hits, respectively, and most of the requests for $F\textsubscript{1}$ were made long ago, while requests made for $F\textsubscript{2}$ were recent. Therefore, it is likely that $F\textsubscript{2}$ will be reaccessed shortly compared to $F\textsubscript{1}$. This means that the timing of requests plays a vital role in determining the probability of future access. Therefore, the P2P data replication algorithms that do not use timestamp information could lead to sub-optimal system performance. 
+
+Temporal locality is the natural tendency of applications to repeatedly utilize the same data objects while running over a period of time. This is the underlying idea of caching mechanisms and outlines a clear direction for an efficient data management strategy. This implies that the files accessed recently are likely to be reaccessed. Therefore, it is recommended that more importance be given to a recently accessed file than a file that was accessed a long time ago, along with the number of times it has been accessed. In the above example scenario, requests for F1 should be less important than requests for file F2. This can be accomplished by assigning weights that diminish over time. This can be achieved using a Time-Based Decaying Function (TBDF) \cite{gill_2016_a}. TBDF uses the concept of exponential decay function, which decays the value of TBDF with the passage of time.
+
+\section{Background}\label{sec:related}
+\subsection{Baseline Implementation}
+Since the TBDF depends on the access amount of files and timing information, the number of requests for all files must be tracked at each node. The node also applies the exponential decay function at regular intervals to each file. This value is multiplied by the access amount of the corresponding file to obtain the weight/importance of the file. The array is in descending order so that the most popular files are placed first. 
+
+The node’s overheating similarity describes the probability that a node becomes overloaded. The function to define the overheating similarity is based on the proximity of the current state to the overloaded threshold. The similarity range is a probability range where a node can change into an overloaded node. Each node can measure the overheating similarity, and when it approaches the similarity range, it is considered the replica creation opportune moment. 
+
+A node degree is the number of direct links that connect a node to its neighbors. Ideally, a node with a high node degree and low overheating similarity is chosen as the placement node. An index of evaluation is formed by combining node degree and overheating similarity. This index is used in the fuzzy clustering algorithm to obtain the optimal placement node.
+
+\subsection{Related Work}
+The review by Milani et al. \cite{ALAMIMILANI2016229} indicates that some dynamic approaches allow their associated replication strategies to be adjusted at run time according to user behavior and network topology changes. Lin et al. proposed two QoS-aware Data Replication (QADR) algorithms in cloud computing systems to support the quality of service (QoS) requirements of applications \cite{lin_dynamic}. The first algorithm adopts the intuitive idea of high-QoS first-replication (HQFR) but cannot minimize the data replication cost and the number of QoS-violated data replicas. The second algorithm uses the well-known minimum-cost maximum-flow (MCMF) problem to produce an optimal solution in polynomial time, although more computational time is required. Node combination techniques are proposed to reduce the data replication time, and simulation experiments are conducted to demonstrate the effectiveness of the algorithms. Boru et al. proposed a data replication technique focusing on energy efficiency and bandwidth consumption \cite{boru_energy}. In addition to improved quality of service, the results from the mathematical model and simulations reveal potential tradeoffs between performance and energy efficiency. They can be used to guide the design of future replication solutions.
+
+Traditional file replication strategies often cause high storage consumption. To achieve better load balancing and data reliability needs, the paper \cite{sun_2019_rrsd} presents a file replication approach - data reliability and reducing storage consumption in a dynamic Cloud-P2P (RRSD). To accomplish its objective, RRSD applies the techniques of ”multiple replica placement” and ”redundant replica elimination.” Sun et al. claim that the system’s performance increases as more replicas are added \cite{sun_2009_dynamic}. However, most replication strategies techniques create an excess number of replicas which causes overhead for consistency and storage maintenance. Therefore, the authors presented a dynamic minimum access cost-based replication (MAC replication) approach \cite{sun_2009_dynamic}. The MAC replication strategy considers the access frequency, network connection state, and average response time. The most popular files are chosen first, and the resource that needs to be replicated is determined by calculating the average response time for each popular file.
+
+In order to better assess the effectiveness of a replication strategy, it is necessary to have \cite{chang_2008_a} well-defined metrics and frameworks that can evaluate the performance of the system under high-load conditions. In paper [11], a framework for studying the replica placement reliability is studied by proposing a metric called Mean Time To Data Loss (MTTDL). MTTDL indicates how long, on average, the system can last after being loaded with data objects before losing the first data object in the system permanently. Huang et al. \cite{huang2014modeling} presented an analysis of the reliability of data nodes and the corresponding network links and proposed a reliability model for cloud storage systems. The paper first introduces the relationships among the access reliability, the replica numbers and the user access frequency, the reliability of data service and the trigger mechanism of replica generation, and the storage node selection. Then, the paper proposes the replica distribution algorithm and the replica deletion algorithm.
+
+These works emphasized a single dimension of data replication, like evaluation strategy, reducing additional storage overhead, QoS, and energy efficiency, ignoring the other aspects. The proposed solution, which is an improvement to DARS, caters not only to the aspects mentioned earlier but also to replica placement, creation time, and file selection.
+
+\subsection{State of the art}
+Gill and Singh proposed a Dynamic Cost-Aware Re-Replication and Re-balancing Strategy (DCR2S) \cite{gill_2016_a}, which optimizes the replication process by finding the necessary minimum number of replicas to achieve the desired availability. The algorithm has three phases: determining which files and when to replicate, calculating the suitable number of new replicas, and deciding where to place them. First, the Time Based Decaying Function (TBDF) assigns weights or importance to recent accesses compared to past accesses of a data file and decays over time. The replica factor of each file is then analyzed to decide whether replication is necessary.
+
+Sun et al. proposed DARS(Dynamic adaptive replication strategy) \cite{sun_2009_dynamic}, which suggests that node overload is caused by the number of requests it receives in a given time. It assumes this is mainly due to the number of requests for local files and the number of requests the node forwards. This strategy proposes that a node can reduce the risk of overload by creating a replica before it becomes too hot. However, it should not create replicas indiscriminately, as this may increase unnecessary replicas. It is suggested that replicas should be created when a node's load is close to reaching the overload threshold, which is described as overheating similarity. The membership function of overheating similarity determines the proximity of the current node state to the overload state. To obtain the replica creation opportune moment, DARS describes the relationship between the request, node load, overheating similarity, and membership function of overheating similarity. It is proposed that a node create replicas when the load reaches a pre-defined similarity range to reduce the overload probability. This range, which consists of the floor and ceiling values of the overheating similarity, is used to determine the opportune moment for replica creation. This measure is especially effective in high-load conditions.
+
+In this project, we propose optimized DARS, which can enhance the file selection strategy of DARS. Consequently, this could result in fewer redundant replicas, which increases the overall system performance. Optimized DARS uses TBDF for hot file selection in an overloaded node. The access amount $V\textsubscript{i}$ of a node is the summation of hits of all files on the node. This is used in calculation of the load factor, which is described as the current access amount of the node divided by the maximum access amount that a node can handle.
+
+Additionally, at each node, when a file receives a request, the timestamp and the total number of hits received for the file will be recorded. This information is used to calculate the decay factor $f\textsubscript{i}$ of the files, which is done using the exponential decay function. The calculation of other values such as pre-hot threshold \straighttheta \space are same as described in the original DARS method \cite{sun_2009_dynamic}. However, in the optimized DARS, the file selection process is altered. The algorithm is elaborated in the following steps:
+\\
+1. Each storage layer node $HC\textsubscript{i}$ calculates its load factor.
+\\
+2. If the load factor $q\textsubscript{i}$ is greater than the pre-hot threshold \straighttheta, it is implied that the node can become overloaded. Hence the node must initiate the replication process.
+\\
+3. If overheating probability $A(q\textsubscript{i})$ reaches the similarity range, i.e., A reaches [\textalpha, \textepsilon), the node must select the files causing the overload.
+\\
+4. Get the array $A\textsubscript{HC}$, where files are ordered in decreasing order of their decay factor.
+\\
+5. Obtain the neighborhood set of nodes $U\textsubscript{HC}$ using fuzzy clustering analysis.
+\\
+6. Calculate the overheating probability and node degree of all nodes in the neighborhood set.
+\\
+7. Select the node with the highest node degree and lowest overheating probability (with precedence to overheating probability).
+\\
+8. Store the files in $A\textsubscript{HC}$ in the optimal placement node P.
+
+The optimized DARS will be simulated using CloudSim simulator to evaluate the effectiveness of the altered file selection process.
+
+\section{Methods/System Design}\label{sec:related}
+\subsection{Background processing in the node}
+\centering
+\includegraphics[width=0.25\textwidth]{project/fig/Background Processing.drawio.png}
+\subsection{Data flow from user to node}
+\includegraphics[width=0.25\textwidth]{project/fig/P2P network Data flow.drawio.png}
+
+\section{Evaluation Methodology}\label{sec:related}
+
+\section{Results}\label{sec:introduction}
+The use of a replica strategy in a Cloud-P2P system can significantly reduce access delay and improve load balance. Traditional strategies typically rely on fixed thresholds for adjusting afterwards to achieve low access delay and high load balance, but these may result in a large number of overloaded nodes, leading to poor service performance, particularly under high load conditions. This paper presents a DARS replica strategy that aims to reduce the number of overloaded nodes by paying attention to the time of replica creation. DARS uses a decentralized self-adaptive approach to determine the optimal moment for creating a replica and finding the best placement node. It defines a membership function based on node overheating similarity and designs a similar range for relieving overload. When the overheating similarity reaches or exceeds the predefined range, the node begins to create a replica. DARS combines overheating similarity and node degree as reference indices and employs fuzzy clustering analysis to select high node degree and low overheating similarity nodes as placement nodes. Extensive experiments show that DARS outperforms other replica strategies, significantly reducing the number of overloaded nodes and improving the probability of replica access, resulting in low access delay and high load balance. In future work, the authors plan to investigate methods for deleting redundant replicas to achieve low access latency and high load balance while minimizing replicas and exploring adaptive methods for efficient replica consistency maintenance in a Cloud-P2P system.
+\section{Discussion}\label{sec:related}
+
+\section{Conclusion}\label{sec:related}
+
+\section{Acknowledgment}\label{sec:related}
+
+\bibliographystyle{IEEEtran}
+\bibliography{IEEEmybib}
+
+\end{document}

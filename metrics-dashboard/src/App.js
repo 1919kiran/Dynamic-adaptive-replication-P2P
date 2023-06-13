@@ -47,6 +47,9 @@ const App = () => {
                         <th>OHS</th>
                         <th>Bandwidth</th>
                         <th>Avg Latency</th>
+                        <th>Queue size</th>
+                        <th>File set</th>
+                        <th>Unavailable time</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -56,6 +59,9 @@ const App = () => {
                             <td>{node.ohs}</td>
                             <td>{node.bandwidth}</td>
                             <td>{node.avg_latency}</td>
+                            <td>{node.queue_size}</td>
+                            <td>{node.file_set}</td>
+                            <td>{node.unavailable_time}</td>
                         </tr>
                     ))}
                 </tbody>

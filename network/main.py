@@ -16,13 +16,15 @@ if __name__ == "__main__":
     node_locations = get_node_locations(num_nodes=num_nodes + 1)
 
     nw_manager.set_node_locations(node_locations)
-    nw_manager.delete_message_queues()
+    # nw_manager.delete_message_queues()
     nw_manager.create_message_queues()
 
-    time.sleep(1)
+    time.sleep(0.5)
     nw_manager.start_nodes()
-    time.sleep(1)
+
+    time.sleep(0.5)
     nw_manager.start()
-    time.sleep(1)
+
+    time.sleep(0.5)
     request_generator.start()
 

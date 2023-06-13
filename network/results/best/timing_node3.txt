@@ -1,0 +1,1 @@
+{'total_idle_time': 44.93832445144653, 'simulation_time': 119.0419807434082, 'downtime': 2.0718210000000004, 'overheated_time': 2.590766429901123, 'normal_time': 69.44106886206055}

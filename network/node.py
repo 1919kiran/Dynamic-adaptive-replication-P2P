@@ -1,10 +1,12 @@
+import datetime
 import heapq
+import sys
 import threading
 import time
 from multiprocessing import Process
 import json
 import pika
-
+import psutil
 from cython_modules import distance_calculator
 from network.sharedqueue import SharedQueue
 from network.util.util import normalize
@@ -22,10 +24,10 @@ class Node(Process):
             self.node_file_mapping = node_file_mapping
             self.file_node_mapping = file_node_mapping
             self.acceptance_state = acceptance_state
-            self.max_capacity = 500
+            self.max_capacity = 1000
             self.request_amount = 0
             self.forwarding_bandwidth = 0
-            self.available_bandwidth = 1000
+            self.available_bandwidth = 10000
             self.curr_bandwidth = 0
             self.avg_latency = 0
             self.theta = 0.3
@@ -39,11 +41,22 @@ class Node(Process):
             self.connection = None
             self.channel = None
             self.local_queue = SharedQueue()
+            self.t1 = None
+            self.unavailable_time = 0
+            self.curr_idle_start = time.time()
+            self.simulation_start = time.time()
+            self.overheating_start = None
+            self.total_overheating_time = 0
+            self.total_idle_time = 0
+            self.idle_ticks = 0
             if self.file_set is not None:
                 for file in self.file_set:
                     self.file_metadata[file] = ([], [])
             self.weights = dict()
+            self.node_metrics = []
             self.curr_node_location = self.node_locations.get(self.node_id)
+            self.properties = pika.BasicProperties(headers={"producer_tag": f"Node{self.node_id}"})
+
         except Exception as e:
             print(f"[node {self.node_id}] Error while initializing Node{node_id}", e)
 
@@ -67,10 +80,7 @@ class Node(Process):
         while True:
             try:
                 if not self.local_queue.empty():
-                    low = 0.05
-                    high = 0.1
-                    time_for_replication = 0.075
-
+                    time_for_replication = 0.005
                     request = self.local_queue.get()
                     file_id = int(request.get("file_id"))
                     file_origin = request.get("origin")
@@ -87,6 +97,19 @@ class Node(Process):
                             self.curr_node_location[0], self.curr_node_location[1]
                         )
                         file_latencies.append(latency + time_for_replication)
+                        total_latency = latency + time_for_replication
+                        msg = {
+                            "file": file_id,
+                            "node": self.node_id,
+                            "latency": total_latency*1000,
+                            "available_buffer": self.local_queue.qsize(),
+                            "capacity": self.max_capacity,
+                            "ohs": self.curr_ohs
+                        }
+                        self.node_metrics.append(msg)
+                        # self.channel.basic_publish(exchange="",
+                        #                            routing_key="results",
+                        #                            body=msg)
                         file_meta = (file_accesses, file_latencies)
                         self.file_metadata[file_id] = file_meta
                     time.sleep(time_for_replication)
@@ -109,39 +132,88 @@ class Node(Process):
             self.ohs_map[self.node_id] = self.curr_ohs
             self.calculate_weights()
             avg_latency = self.calculate_latency()
-            bw = self.available_bandwidth - (self.local_queue.qsize() * 5)
+            bw = self.available_bandwidth - (self.local_queue.qsize() * 10)
             if bw < 0:
                 bw = 0
+            if self.local_queue.qsize() == 0:
+                self.idle_ticks += 1
+                if self.idle_ticks == 1:
+                    self.curr_idle_start = time.time()
+                if self.idle_ticks == 100:
+                    end = time.time()
+                    self.total_idle_time += end - self.curr_idle_start
+                    print(f"[node {self.node_id}] idle time = {self.total_idle_time} secs")
+                    timing = {
+                        "total_idle_time": self.total_idle_time,
+                        "simulation_time": end - self.simulation_start,
+                        "downtime": self.unavailable_time,
+                        "overheated_time": self.total_overheating_time,
+                        "normal_time": end - self.simulation_start - (self.total_idle_time + self.unavailable_time + self.total_overheating_time)
+                    }
+                    time.sleep(1)
+                    f1 = f"metrics_node{self.node_id}.txt"
+                    f2 = f"timing_node{self.node_id}.txt"
+                    with open(f"results/{f1}", "w") as f:
+                        f.write(str(self.node_metrics))
+                    with open(f"results/{f2}", "w") as f:
+                        f.write(str(timing))
+                    time.sleep(1)
+                    print(f"Stopping node {self.node_id}")
+                    sys.exit(0)
+            else:
+                if self.idle_ticks > 0:
+                    self.total_idle_time += time.time() - self.curr_idle_start
+                    self.curr_idle_start = time.time()
+                self.idle_ticks = 0
             self.curr_bandwidth = bw
             self.avg_latency = avg_latency
             if self.node_id == 1:
-                print(f"[node {self.node_id}] Node ohs: ", self.ohs_map)
-                print(f"[node {self.node_id}] Queue size = {self.local_queue.qsize()}")
-                print(f"[node {self.node_id}] Avg latency = {avg_latency} ms")
-                print(f"[node {self.node_id}] Available bandwidth = {bw} Mb")
+                # print(f"[node {self.node_id}] Node ohs: ", self.ohs_map)
+                # print(f"[node {self.node_id}] Queue size = {self.local_queue.qsize()}")
+                # print(f"[node {self.node_id}] Avg latency = {avg_latency} ms")
+                # print(f"[node {self.node_id}] Available bandwidth = {bw} Mb")
+                # print(f"[node {self.node_id}] idle time = {self.total_idle_time} secs")
+                # print(f"[node {self.node_id}] unavailable time = {self.unavailable_time} secs")
+                # print(f"[node {self.node_id}] overheating time = {self.total_overheating_time} secs")
+                print(f"[node {self.node_id}] total simulation time = {time.time() - self.simulation_start} secs")
+                # print(f"[node {self.node_id}] ohs = {self.curr_ohs}")
+                # print(f"[node {self.node_id}] overheating time = {self.total_overheating_time} secs")
+                # print(f"[node {self.node_id}] overheating time = {self.total_overheating_time} secs")
+
                 print()
+            flag = True
             if self.curr_ohs >= self.phi:
                 # Check if the node is overloaded. If yes, then get the hot file, calculate optimal placement node
                 # and begin replication
+                self.overheating_start = time.time()
                 hot_file = heapq.nlargest(1, self.weights.items(), key=lambda x: x[1])
                 hot_file = hot_file[0][0]
                 placement_nodes = self.get_optimal_neighbors(hot_file)
                 if len(placement_nodes) == 0:
                     self.acceptance_state[self.node_id] = False
+                    self.t1 = datetime.datetime.now()
                     print(f"[node {self.node_id}] Cannot replicate File{hot_file} from Node{self.node_id} as there is no availability of nodes")
                 for placement_node_id in placement_nodes:
                     self.start_replication(hot_file, placement_node_id)
-                    self.update_mapping(placement_node_id, hot_file)
+                    # self.update_mapping(placement_node_id, hot_file)
                     break
             elif self.curr_ohs < self.phi and not self.acceptance_state[self.node_id]:
-                # If the node is not overloaded and it's acceptance state was false, it implies now it is ready to
-                # accept new requests.
+                # If the node is not overloaded and it's acceptance state was false, it implies now it is ready to accept new requests.
                 print(f"[node {self.node_id}] Node{self.node_id} is now ready to accept new requests...")
                 self.acceptance_state[self.node_id] = True
+                self.unavailable_time += (datetime.datetime.now() - self.t1).total_seconds()
+                flag = False
+                if self.overheating_start is not None:
+                    self.total_overheating_time += time.time() - self.overheating_start
+                    self.overheating_start = None
+            elif self.curr_ohs < self.phi and flag:
+                if self.overheating_start is not None:
+                    self.total_overheating_time += time.time() - self.overheating_start
+                    self.overheating_start = None
 
             # publish the metrics to message queue
             self.publish_metrics()
-            time.sleep(1)
+            time.sleep(0.25)
 
     def enqueue_request(self, request):
         """
@@ -191,8 +263,8 @@ class Node(Process):
     def overheating_similarity_membership(self):
         beta = 50
         ohs_member = 100 // (1 + ((self.curr_ohs - self.phi) * (self.curr_ohs - self.phi) * (beta)))
-        if self.node_id == 2:
-            print(f"[node {self.node_id}] ohs member {self.node_id}", ohs_member)
+        # if self.node_id == 2:
+        #     print(f"[node {self.node_id}] ohs member {self.node_id}", ohs_member)
         return 1 if self.alpha <= ohs_member else 0
 
     def start_replication(self, file_id, placement_node_id):
@@ -201,7 +273,7 @@ class Node(Process):
         """
         print(
             f"[node {self.node_id}] File transfer for File{file_id} is in progress from Node{self.node_id} to Node{placement_node_id}")
-        time.sleep(1)
+        # time.sleep(1)
 
     def get_optimal_neighbors(self, file_id):
         """
@@ -252,7 +324,10 @@ class Node(Process):
         """
         Updates the file-to-node mapping and node-to-file mapping
         """
+        print(f"[node {self.node_id}] Old file-node mapping: {self.file_node_mapping}")
+        print(f"[node {self.node_id}] Old node-file mapping: {self.node_file_mapping}")
         placement_node_files = self.node_file_mapping.get(placement_node_id)
+        print("placement_node_files = ", placement_node_files)
         if file_id not in placement_node_files:
             placement_node_files.append(file_id)
         self.node_file_mapping[placement_node_id] = placement_node_files
@@ -261,8 +336,9 @@ class Node(Process):
         if placement_node_id not in nodes:
             nodes.append(placement_node_id)
         self.file_node_mapping[file_id] = nodes
-
-        print(f"[node {self.node_id}] Updated the file and node mapping of Node{placement_node_id}. New file to node mapping is: {self.file_node_mapping}")
+        print(f"[node {self.node_id}] New file-node mapping: {self.file_node_mapping}")
+        print(f"[node {self.node_id}] New node-file mapping: {self.node_file_mapping}")
+        # print(f"[node {self.node_id}] Updated the file and node mapping of Node{placement_node_id}. New file to node mapping is: {self.file_node_mapping}")
 
     def is_connected(self, placement_node_id):
         connections = self.adj_list.get(self.node_id)
@@ -280,14 +356,21 @@ class Node(Process):
             return True
 
     def publish_metrics(self):
+        process = psutil.Process(self.pid)
         message_body = {
             "node_id": self.node_id,
             "ohs": self.curr_ohs,
             "bandwidth": self.curr_bandwidth,
-            "avg_latency": self.avg_latency
+            "avg_latency": self.avg_latency,
+            "queue_size": self.local_queue.qsize(),
+            "file_set": self.node_file_mapping.get(self.node_id),
+            "unavailable_time": self.unavailable_time,
+            "memory": process.memory_percent()
         }
         message = json.dumps(message_body).encode("utf-8")
         self.channel.basic_publish(exchange="",
                                    routing_key="metrics_queue",
                                    body=message)
+        # with open("../data-extraction/latency-best.txt", "r") as f:
+        #     f.write(json.dumps(self.file_metadata))
 

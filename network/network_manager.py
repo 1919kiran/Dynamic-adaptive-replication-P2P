@@ -38,21 +38,18 @@ class NetworkManager(threading.Thread):
         queue_name = "job_queue"
         self.channel.queue_declare(queue=queue_name)
         self.channel.queue_bind(queue=queue_name, exchange="amq.direct", routing_key=queue_name)
-        self.channel.basic_consume(queue=queue_name, auto_ack=True, on_message_callback=self.callback)
+        self.channel.basic_consume(queue=queue_name, auto_ack=True, on_message_callback=self.callback, consumer_tag="Network manager")
         self.channel.start_consuming()
-        # background_process = threading.Thread(target=self.background_process)
-        # background_process.start()
 
     def callback(self, ch, method, properties, body):
-        # print(self.file_mapping)
         request_body = json.loads(body.decode())
         file_id = request_body["file_id"]
         node_ids = self.get_ordered_nodes(file_id=request_body["file_id"], request_origin=request_body["origin"])
+        # print(f"Request for file{file_id} node ids={node_ids}")
         i = 0
         for node_id in node_ids:
             i += 1
             node_pid = self.node_pool.get(node_id)
-            # node = next((n for n in self.nodes if n.pid == node_pid and self.acceptance_state[node_id]), None)
             node = None
             for n in self.nodes:
                 if n.pid == node_pid and self.acceptance_state[node_id]:
@@ -64,7 +61,6 @@ class NetworkManager(threading.Thread):
             elif i != len(node_ids):
                 continue
             else:
-                # print("node_ids = ", node_ids)
                 print("All nodes are overloaded. Pausing for 5 secs")
                 time.sleep(5)
 
@@ -99,9 +95,9 @@ class NetworkManager(threading.Thread):
     def create_message_queues(self):
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host="localhost"))
         channel = self.connection.channel()
-        for key in self.file_mapping.keys():
-            channel.queue_declare(queue="job_queue")
-            print(f"Job Queue created successfully.")
+        channel.queue_declare(queue="job_queue")
+        channel.queue_purge("job_queue")
+        print(f"Job Queue created successfully.")
 
     def delete_message_queues(self):
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host="localhost"))
@@ -116,18 +112,29 @@ class NetworkManager(threading.Thread):
 
     """ Creates an adjacency list """
     def create_adjacency_list(self):
-        self.adj_list = {i: set() for i in range(1, self.num_nodes + 1)}
-        for curr in range(1, self.num_nodes):
-            num_neighbors = random.randint(1, self.num_nodes)
-            for i in range(num_neighbors):
-                neighbor = random.randint(1, self.num_nodes)
-                if curr != neighbor:
-                    self.adj_list[curr].add(neighbor)
-                    self.adj_list[neighbor].add(curr)
-        print("Created adjacency list")
-        for node_id, neighbors in self.adj_list.items():
-            print(f"Node{node_id} is connected to nodes {neighbors}")
-
+        # self.adj_list = {i: set() for i in range(1, self.num_nodes + 1)}
+        # for curr in range(1, self.num_nodes):
+        #     num_neighbors = random.randint(1, self.num_nodes)
+        #     for i in range(num_neighbors):
+        #         neighbor = random.randint(1, self.num_nodes)
+        #         if curr != neighbor:
+        #             self.adj_list[curr].add(neighbor)
+        #             self.adj_list[neighbor].add(curr)
+        # print("Created adjacency list")
+        # for node_id, neighbors in self.adj_list.items():
+        #     print(f"Node{node_id} is connected to nodes {neighbors}")
+        self.adj_list = {
+            1: {2, 3, 4, 5},
+            2: {1, 3, 4, 5},
+            3: {1, 2, 4, 5},
+            4: {1, 2, 3, 5},
+            5: {1, 2, 3, 4}
+            # 1: {2, 5},
+            # 2: {1, 3},
+            # 3: {2, 4},
+            # 4: {3, 5},
+            # 5: {1, 4}
+        }
         return self.adj_list
 
     def set_node_locations(self, node_locations):
@@ -141,7 +148,7 @@ class NetworkManager(threading.Thread):
         self.file_mapping = {
             1: [1, 2, 3],
             2: [1, 4, 5],
-            3: [1, 4, 3]
+            3: [1, 3]
         }
         for file_id, node_ids in self.file_mapping.items():
             for node_id in node_ids:

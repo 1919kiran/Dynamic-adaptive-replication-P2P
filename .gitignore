@@ -32,3 +32,4 @@ replay_pid*
 __pycache__/
 
 .*
+data-extraction/requests.csv
